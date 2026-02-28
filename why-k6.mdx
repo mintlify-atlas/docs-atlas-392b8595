@@ -1,0 +1,384 @@
+---
+title: Why Choose k6?
+description: Discover why k6 is the preferred load testing tool for developers and engineering teams building reliable, high-performing applications.
+---
+
+# Why choose k6?
+
+Grafana k6 is designed for modern engineering teams who need to ensure their applications and infrastructure can handle real-world load. Whether you're a developer, QA engineer, SDET, or SRE, k6 provides the tools you need to catch performance issues early and build confidence in your systems.
+
+## Built for developers
+
+k6 is designed with developers in mind, making performance testing accessible and integrated into your existing workflow.
+
+### JavaScript testing
+
+Write tests in JavaScript, a language most developers already know. No need to learn proprietary scripting languages or complex frameworks.
+
+```javascript
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+
+export const options = {
+  vus: 10,
+  duration: '30s',
+};
+
+export default function () {
+  const res = http.get('https://quickpizza.grafana.com/');
+  check(res, { 'status was 200': (r) => r.status === 200 });
+  sleep(1);
+}
+```
+
+### Version control friendly
+
+Test scripts are plain text files that live alongside your application code. You can:
+
+- Track changes with Git
+- Review test modifications in pull requests
+- Reuse common test logic across multiple scripts
+- Collaborate with your team using familiar tools
+
+### Auto-completion and IntelliSense
+
+k6 provides TypeScript type definitions that enable intelligent code completion and inline documentation in popular editors like VS Code and JetBrains IDEs.
+
+<Tip>
+Configure your code editor with k6 IntelliSense to get auto-completion, parameter hints, and quick access to documentation while writing tests.
+</Tip>
+
+## High performance with minimal resources
+
+k6 is built in Go and optimized for performance. You can generate significant load without requiring massive infrastructure.
+
+### Efficient virtual users
+
+k6 uses an event-driven architecture where virtual users (VUs) are lightweight goroutines, not OS threads. This allows you to:
+
+- Run thousands of VUs on a single machine
+- Minimize resource consumption (CPU and memory)
+- Achieve higher throughput with less hardware
+
+### Local or distributed execution
+
+Start with local testing on your laptop, then scale to:
+
+- **Local**: Run tests on a single machine or CI server
+- **Distributed**: Spread load across Kubernetes clusters
+- **Cloud**: Execute tests on Grafana Cloud k6 infrastructure
+
+The same test script works across all execution modes with minimal changes.
+
+## Comprehensive testing capabilities
+
+k6 supports multiple testing approaches to cover your entire application stack.
+
+<Tabs>
+  <Tab title="Protocol Testing">
+    Test APIs and backend services with HTTP/1.1, HTTP/2, WebSocket, gRPC, and more.
+
+    ```javascript
+    import http from 'k6/http';
+
+    export default function () {
+      // REST API
+      const res = http.post('https://api.example.com/users', JSON.stringify({
+        name: 'User',
+        email: 'user@example.com'
+      }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    ```
+  </Tab>
+  <Tab title="Browser Testing">
+    Simulate real user interactions with the k6 browser module.
+
+    ```javascript
+    import { browser } from 'k6/browser';
+
+    export default async function () {
+      const page = await browser.newPage();
+      await page.goto('https://quickpizza.grafana.com');
+      await page.locator('button[type="submit"]').click();
+      await page.screenshot({ path: 'screenshot.png' });
+      await page.close();
+    }
+    ```
+  </Tab>
+  <Tab title="Hybrid Testing">
+    Combine protocol and browser testing in a single script for comprehensive performance analysis.
+
+    ```javascript
+    import http from 'k6/http';
+    import { browser } from 'k6/browser';
+
+    export const options = {
+      scenarios: {
+        api: {
+          executor: 'constant-vus',
+          exec: 'apiTest',
+          vus: 50,
+          duration: '1m',
+        },
+        browser: {
+          executor: 'constant-vus',
+          exec: 'browserTest',
+          vus: 2,
+          duration: '1m',
+        },
+      },
+    };
+
+    export function apiTest() {
+      http.get('https://api.example.com/products');
+    }
+
+    export async function browserTest() {
+      const page = await browser.newPage();
+      await page.goto('https://example.com');
+      await page.close();
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Flexible test configuration
+
+k6 provides powerful options for modeling realistic traffic patterns.
+
+### Multiple test types
+
+Easily configure different load patterns for various testing goals:
+
+- **Smoke tests**: Verify scripts work with minimal load
+- **Load tests**: Assess performance under typical traffic
+- **Stress tests**: Find breaking points with increasing load
+- **Spike tests**: Validate behavior during sudden traffic surges
+- **Soak tests**: Detect memory leaks and degradation over time
+
+### Ramping and stages
+
+Gradually increase or decrease load to simulate realistic traffic patterns:
+
+```javascript
+export const options = {
+  stages: [
+    { duration: '30s', target: 20 },   // Ramp up to 20 VUs
+    { duration: '1m30s', target: 10 }, // Ramp down to 10 VUs
+    { duration: '20s', target: 0 },    // Ramp down to 0 VUs
+  ],
+};
+```
+
+### Scenarios for complex workflows
+
+Run multiple test scenarios in parallel with different executors and configurations:
+
+```javascript
+export const options = {
+  scenarios: {
+    constant_load: {
+      executor: 'constant-vus',
+      vus: 10,
+      duration: '1m',
+    },
+    ramping_load: {
+      executor: 'ramping-vus',
+      startVUs: 0,
+      stages: [
+        { duration: '30s', target: 50 },
+        { duration: '30s', target: 0 },
+      ],
+    },
+  },
+};
+```
+
+## Built-in metrics and analysis
+
+k6 automatically collects detailed performance metrics without additional configuration.
+
+### Standard metrics
+
+Every test provides essential metrics out of the box:
+
+- `http_req_duration`: Total request time (latency)
+- `http_req_failed`: Number of failed requests
+- `http_reqs`: Total HTTP requests per second
+- `iterations`: Number of completed test iterations
+- `vus`: Number of active virtual users
+
+### Custom metrics and checks
+
+Add business-specific validations and custom metrics:
+
+```javascript
+import { check } from 'k6';
+import { Counter, Trend } from 'k6/metrics';
+
+const myCounter = new Counter('my_custom_counter');
+const myTrend = new Trend('my_custom_duration');
+
+export default function () {
+  const res = http.get('https://api.example.com/data');
+  
+  check(res, {
+    'status is 200': (r) => r.status === 200,
+    'response time < 500ms': (r) => r.timings.duration < 500,
+    'body contains expected data': (r) => r.body.includes('success'),
+  });
+  
+  myCounter.add(1);
+  myTrend.add(res.timings.duration);
+}
+```
+
+### Thresholds for pass/fail criteria
+
+Define performance SLOs and automatically fail tests that don't meet requirements:
+
+```javascript
+export const options = {
+  thresholds: {
+    'http_req_duration': ['p(95)<500'], // 95% of requests must complete below 500ms
+    'http_req_failed': ['rate<0.01'],   // Error rate must be below 1%
+  },
+};
+```
+
+## Seamless CI/CD integration
+
+k6 is built for automation and integrates with your existing development workflow.
+
+### Exit codes for automation
+
+k6 returns appropriate exit codes based on test results:
+
+- `0`: Test passed all thresholds
+- Non-zero: Test failed or encountered errors
+
+This makes it easy to fail builds when performance requirements aren't met.
+
+### Popular integrations
+
+k6 works with all major CI/CD platforms:
+
+- GitHub Actions
+- GitLab CI
+- Jenkins
+- CircleCI
+- Azure DevOps
+- TeamCity
+
+<CodeGroup>
+```yaml GitHub Actions
+name: Load Test
+on: [push]
+jobs:
+  k6-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Run k6 test
+        uses: grafana/k6-action@v0.3.1
+        with:
+          filename: test.js
+```
+
+```yaml GitLab CI
+k6-test:
+  image: grafana/k6:latest
+  script:
+    - k6 run test.js
+  only:
+    - main
+```
+
+```groovy Jenkins
+pipeline {
+  agent any
+  stages {
+    stage('Load Test') {
+      steps {
+        sh 'k6 run test.js'
+      }
+    }
+  }
+}
+```
+</CodeGroup>
+
+## Extensible architecture
+
+Extend k6's capabilities to match your specific testing needs.
+
+### k6 extensions
+
+Add support for additional protocols and features using Go-based extensions:
+
+- **xk6-kafka**: Test Kafka producers and consumers
+- **xk6-sql**: Query databases directly
+- **xk6-disruptor**: Inject faults in Kubernetes
+- **xk6-output-prometheus**: Export metrics to Prometheus
+
+Browse the [k6 extensions catalog](https://grafana.com/docs/k6/latest/extensions/) to find or build custom extensions.
+
+### JavaScript libraries
+
+Import npm packages and custom modules to reuse code:
+
+```javascript
+import { randomString } from './utils.js';
+import papaparse from 'https://jslib.k6.io/papaparse/5.1.1/index.js';
+
+export default function () {
+  const randomUser = randomString(10);
+  const csvData = papaparse.parse(open('./data.csv'));
+  // Use imported functionality
+}
+```
+
+## Open source and community-driven
+
+k6 is open source (AGPL-3.0) with an active community and transparent development.
+
+### Active development
+
+- Regular releases with new features and improvements
+- Responsive to community feedback and contributions
+- Comprehensive documentation and examples
+
+### Commercial support
+
+Grafana Cloud k6 provides additional capabilities:
+
+- Cloud-based test execution
+- Scalable infrastructure for large tests
+- Advanced result visualization and insights
+- Team collaboration features
+- Long-term result storage
+
+<Note>
+k6 OSS is fully featured and free forever. Grafana Cloud k6 adds convenience and scale for teams running large or frequent tests.
+</Note>
+
+## Ready to get started?
+
+<CardGroup cols={2}>
+  <Card
+    title="Install k6"
+    icon="download"
+    href="/get-started/installation"
+  >
+    Install k6 on your platform in minutes
+  </Card>
+  <Card
+    title="Write Your First Test"
+    icon="code"
+    href="/get-started/first-test"
+  >
+    Create and run your first k6 test script
+  </Card>
+</CardGroup>

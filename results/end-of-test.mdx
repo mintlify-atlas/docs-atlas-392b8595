@@ -1,0 +1,324 @@
+---
+title: End-of-Test Summary
+description: Understand the end-of-test summary that k6 displays after your test completes, including metrics, thresholds, and checks.
+---
+
+# End-of-Test Summary
+
+When a test finishes, k6 prints a summary of aggregated results to `stdout`. This summary provides a comprehensive overview of your test execution, organized by thresholds, checks, and metric categories.
+
+## Summary Modes
+
+k6 provides three display modes through the `--summary-mode` option:
+
+<Tabs>
+  <Tab title="compact (default)">
+    The compact mode displays the most relevant test results in a concise format, focusing on:
+
+    - Threshold results
+    - Check results
+    - Aggregated metrics by category
+
+    ```sh
+    k6 run script.js
+    # or explicitly
+    k6 run --summary-mode=compact script.js
+    ```
+
+    **Example output:**
+
+    ```text
+      █ THRESHOLDS
+
+        http_req_duration
+        ✓ 'p(95)<1500' p(95)=148.21ms
+        ✓ 'p(90)<2000' p(90)=146.88ms
+
+        http_req_failed
+        ✓ 'rate<0.01' rate=0.00%
+
+
+      █ TOTAL RESULTS
+
+        checks_total.......................: 90      13.122179/s
+        checks_succeeded...................: 100.00% 90 out of 90
+        checks_failed......................: 0.00%   0 out of 90
+
+        ✓ test-api.k6.io is up
+        ✓ status is 200
+
+        CUSTOM
+        custom_waiting_time................: avg=152.355556 min=120      med=141      max=684      p(90)=147.2    p(95)=148.8
+
+        HTTP
+        http_req_duration..................: avg=140.36ms   min=119.08ms med=140.96ms max=154.63ms p(90)=146.88ms p(95)=148.21ms
+          { expected_response:true }.......: avg=140.36ms   min=119.08ms med=140.96ms max=154.63ms p(90)=146.88ms p(95)=148.21ms
+        http_req_failed....................: 0.00%  0 out of 45
+        http_reqs..........................: 45     6.56109/s
+
+        EXECUTION
+        iteration_duration.................: avg=152.38ms   min=119.37ms med=141.27ms max=684.62ms p(90)=147.11ms p(95)=148.39ms
+        iterations.........................: 45     6.56109/s
+        vus................................: 1      min=1       max=1
+        vus_max............................: 1      min=1       max=1
+
+        NETWORK
+        data_received......................: 519 kB 76 kB/s
+        data_sent..........................: 4.9 kB 718 B/s
+    ```
+  </Tab>
+  <Tab title="full">
+    The full mode includes everything from compact mode plus:
+
+    - All HTTP timing metrics (blocked, connecting, TLS handshaking, sending, waiting, receiving)
+    - Group-specific results
+    - Scenario-specific results
+
+    ```sh
+    k6 run --summary-mode=full script.js
+    ```
+
+    This mode is useful when you need detailed breakdowns by scenario or group, or when you want to see all HTTP timing phases.
+  </Tab>
+  <Tab title="legacy">
+    The legacy mode uses the pre-v1.0.0 summary format for backward compatibility.
+
+    ```sh
+    k6 run --summary-mode=legacy script.js
+    ```
+
+    Use this mode if you have tooling that depends on the old format.
+  </Tab>
+</Tabs>
+
+## Understanding the Summary
+
+### Thresholds Section
+
+Thresholds appear at the top of the summary with clear pass/fail indicators:
+
+- ✓ Indicates a passing threshold
+- ✗ Indicates a failing threshold
+
+Each threshold shows its expression and the actual value:
+
+```text
+http_req_duration
+✓ 'p(95)<1500' p(95)=148.21ms
+✗ 'p(99)<500' p(99)=687.43ms
+```
+
+<Info>
+If any threshold fails, k6 exits with a non-zero status code, making it perfect for CI/CD pipelines.
+</Info>
+
+### Checks Section
+
+Checks show pass/fail ratios for assertions in your test:
+
+```text
+checks_total.......................: 90      13.122179/s
+checks_succeeded...................: 100.00% 90 out of 90
+checks_failed......................: 0.00%   0 out of 90
+
+✓ test-api.k6.io is up
+✓ status is 200
+```
+
+<Note>
+Unlike thresholds, failed checks do not cause k6 to exit with an error. They're for informational purposes.
+</Note>
+
+### Metrics by Category
+
+Metrics are organized into categories based on their source:
+
+**CUSTOM** - Your custom metrics using `Trend`, `Counter`, `Gauge`, or `Rate`
+
+**HTTP** - Metrics from the `k6/http` module:
+- `http_req_duration` - Total request time
+- `http_req_blocked` - Time waiting for a free connection slot
+- `http_req_connecting` - Time establishing TCP connection
+- `http_req_tls_handshaking` - Time performing TLS handshake
+- `http_req_sending` - Time sending request data
+- `http_req_waiting` - Time waiting for server response (TTFB)
+- `http_req_receiving` - Time receiving response data
+- `http_req_failed` - Rate of failed requests
+- `http_reqs` - Total number of requests
+
+**EXECUTION** - Test execution metrics:
+- `iteration_duration` - Time to complete one full iteration
+- `iterations` - Total number of iterations completed
+- `vus` - Current number of active virtual users
+- `vus_max` - Maximum VUs allocated
+
+**NETWORK** - Data transfer metrics:
+- `data_received` - Total data received
+- `data_sent` - Total data sent
+
+<Note>
+Categories only appear when relevant. For example, browser metrics appear only when using `k6/browser`.
+</Note>
+
+## Customization Options
+
+k6 provides several options to customize the summary output:
+
+<CodeGroup>
+```sh CLI Flags
+# Choose summary mode
+k6 run --summary-mode=full script.js
+
+# Disable summary
+k6 run --no-summary script.js
+
+# Select trend statistics
+k6 run --summary-trend-stats="min,avg,max,p(95),p(99)" script.js
+
+# Set time unit
+k6 run --summary-time-unit=ms script.js
+```
+
+```javascript Options Object
+export const options = {
+  summaryTrendStats: ['min', 'avg', 'max', 'p(95)', 'p(99)'],
+  summaryTimeUnit: 'ms',
+};
+```
+
+```sh Environment Variables
+K6_SUMMARY_TREND_STATS="min,avg,max,p(95),p(99)" k6 run script.js
+K6_SUMMARY_TIME_UNIT=ms k6 run script.js
+```
+</CodeGroup>
+
+### Available Options
+
+| Option | Description | Default |
+|--------|-------------|--------|
+| `--summary-mode` | Display mode: `compact`, `full`, or `legacy` | `compact` |
+| `--no-summary` | Disable end-of-test summary | `false` |
+| `--summary-trend-stats` | Statistics to show for Trend metrics | `avg,min,med,max,p(90),p(95)` |
+| `--summary-time-unit` | Time unit for all values (s, ms, us) | Auto-detected |
+
+## Custom Summary with handleSummary()
+
+For complete control over the summary output, use the `handleSummary()` function in your test script:
+
+```javascript
+import http from 'k6/http';
+import { textSummary } from 'https://jslib.k6.io/k6-summary/0.0.2/index.js';
+
+export const options = {
+  vus: 10,
+  duration: '30s',
+  thresholds: {
+    http_req_duration: ['p(95)<500'],
+  },
+};
+
+export default function () {
+  http.get('https://test.k6.io');
+}
+
+export function handleSummary(data) {
+  return {
+    'stdout': textSummary(data, { indent: ' ', enableColors: true }),
+    'summary.json': JSON.stringify(data),
+    'summary.html': htmlReport(data),
+  };
+}
+
+function htmlReport(data) {
+  const passed = data.metrics.http_req_duration.thresholds['p(95)<500'].ok;
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head><title>k6 Test Report</title></head>
+      <body>
+        <h1>Test Results: ${passed ? 'PASSED' : 'FAILED'}</h1>
+        <p>Duration: ${data.state.testRunDurationMs}ms</p>
+        <p>Requests: ${data.metrics.http_reqs.values.count}</p>
+        <p>P95: ${data.metrics.http_req_duration.values['p(95)']}ms</p>
+      </body>
+    </html>
+  `;
+}
+```
+
+The `handleSummary()` function:
+- Receives the complete metrics data object
+- Returns a map of `{destination: content}` pairs
+- Can output to `stdout`, `stderr`, or any file path
+- Allows multiple outputs simultaneously
+
+<Info>
+For more details on custom summaries, see the [Custom Summary documentation](https://grafana.com/docs/k6/latest/results-output/end-of-test/custom-summary).
+</Info>
+
+## CI/CD Integration
+
+The end-of-test summary is ideal for CI/CD pipelines:
+
+<CodeGroup>
+```yaml GitHub Actions
+name: Load Test
+on: [push]
+jobs:
+  k6:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Run k6 test
+        uses: grafana/k6-action@v0.3.1
+        with:
+          filename: test.js
+      # k6 exits with code 99 if thresholds fail
+```
+
+```yaml GitLab CI
+load_test:
+  image: grafana/k6:latest
+  script:
+    - k6 run --summary-mode=compact test.js
+  artifacts:
+    when: always
+    reports:
+      junit: summary.xml
+```
+
+```groovy Jenkins
+pipeline {
+  agent any
+  stages {
+    stage('Load Test') {
+      steps {
+        sh 'k6 run --out json=results.json test.js'
+      }
+    }
+  }
+  post {
+    always {
+      archiveArtifacts 'results.json'
+    }
+  }
+}
+```
+</CodeGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Custom Summary" icon="code" href="https://grafana.com/docs/k6/latest/results-output/end-of-test/custom-summary">
+    Create fully customized summary reports with handleSummary()
+  </Card>
+  <Card title="Real-Time Output" icon="stream" href="/results/real-time">
+    Stream metrics during test execution for live monitoring
+  </Card>
+  <Card title="Thresholds" icon="gauge" href="https://grafana.com/docs/k6/latest/using-k6/thresholds">
+    Learn how to define performance requirements with thresholds
+  </Card>
+  <Card title="Checks" icon="check" href="https://grafana.com/docs/k6/latest/using-k6/checks">
+    Understand how to add assertions to your tests
+  </Card>
+</CardGroup>

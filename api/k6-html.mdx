@@ -1,0 +1,395 @@
+---
+title: 'k6/html'
+description: 'HTML parsing utilities for extracting and manipulating HTML content'
+icon: 'code'
+---
+
+The `k6/html` module provides functionality for parsing and manipulating HTML content in k6 scripts. It offers a jQuery-like API for selecting and extracting data from HTML responses.
+
+## Overview
+
+Use this module to:
+- Parse HTML responses from HTTP requests
+- Extract data using CSS selectors
+- Validate HTML structure and content
+- Scrape data for parameterization
+
+## Importing the Module
+
+```javascript
+import { parseHTML } from 'k6/html';
+```
+
+## API Reference
+
+### Functions
+
+<ResponseField name="parseHTML(src)" type="function">
+  Parses an HTML string and returns a Selection object for querying the DOM.
+  
+  **Parameters:**
+  <ParamField path="src" type="string" required>
+    HTML content to parse (typically from an HTTP response body)
+  </ParamField>
+  
+  **Returns:**
+  <ResponseField name="selection" type="Selection">
+    A Selection object representing the document root
+  </ResponseField>
+</ResponseField>
+
+## Selection Class
+
+The Selection object provides a jQuery-like API for traversing and manipulating HTML documents.
+
+### Common Methods
+
+<ResponseField name="find(selector)" type="function">
+  Returns elements matching the CSS selector.
+  
+  **Parameters:**
+  <ParamField path="selector" type="string" required>
+    CSS selector (e.g., `"div.class"`, `"#id"`, `"a[href]")`
+  </ParamField>
+</ResponseField>
+
+<ResponseField name="text()" type="function">
+  Returns the text content of the selection.
+  
+  **Returns:**
+  <ResponseField name="text" type="string">
+    Combined text content of all matched elements
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="html()" type="function">
+  Returns the HTML content of the selection.
+  
+  **Returns:**
+  <ResponseField name="html" type="string">
+    HTML content of the first matched element
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="attr(name)" type="function">
+  Returns the value of an attribute.
+  
+  **Parameters:**
+  <ParamField path="name" type="string" required>
+    Attribute name (e.g., `"href"`, `"src"`, `"class"`)
+  </ParamField>
+</ResponseField>
+
+<ResponseField name="each(callback)" type="function">
+  Iterates over matched elements.
+  
+  **Parameters:**
+  <ParamField path="callback" type="function" required>
+    Function called for each element: `(index, element) => void`
+  </ParamField>
+</ResponseField>
+
+<ResponseField name="size()" type="function">
+  Returns the number of matched elements.
+  
+  **Returns:**
+  <ResponseField name="count" type="number">
+    Number of elements in the selection
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="eq(index)" type="function">
+  Returns the element at the specified index.
+  
+  **Parameters:**
+  <ParamField path="index" type="number" required>
+    Zero-based index of the element
+  </ParamField>
+</ResponseField>
+
+### Traversal Methods
+
+<ResponseField name="children([selector])" type="function">
+  Returns child elements, optionally filtered by selector.
+</ResponseField>
+
+<ResponseField name="parent([selector])" type="function">
+  Returns parent elements, optionally filtered by selector.
+</ResponseField>
+
+<ResponseField name="siblings([selector])" type="function">
+  Returns sibling elements, optionally filtered by selector.
+</ResponseField>
+
+<ResponseField name="next([selector])" type="function">
+  Returns the next sibling element.
+</ResponseField>
+
+<ResponseField name="prev([selector])" type="function">
+  Returns the previous sibling element.
+</ResponseField>
+
+<ResponseField name="closest(selector)" type="function">
+  Returns the closest ancestor matching the selector.
+</ResponseField>
+
+## Element Class
+
+Represents a single HTML DOM element.
+
+<ParamField path="nodeName" type="string">
+  The tag name of the element (e.g., `"div"`, `"a"`, `"span"`)
+</ParamField>
+
+<ParamField path="nodeType" type="number">
+  The type of the node (1 for element nodes)
+</ParamField>
+
+<ParamField path="textContent" type="string">
+  The text content of the element
+</ParamField>
+
+<ParamField path="innerHTML" type="string">
+  The HTML content of the element
+</ParamField>
+
+<ParamField path="attributes" type="object">
+  Map of attribute names to values
+</ParamField>
+
+## Examples
+
+### Parsing HTTP Response
+
+<CodeGroup>
+```javascript Basic HTML Parsing
+import http from 'k6/http';
+import { parseHTML } from 'k6/html';
+import { check } from 'k6';
+
+export default function () {
+  const res = http.get('https://test.k6.io');
+  const doc = parseHTML(res.body);
+  
+  const pageTitle = doc.find('head title').text();
+  
+  check(pageTitle, {
+    'page title is correct': (title) => title === 'test.k6.io',
+  });
+}
+```
+
+```javascript Extracting Links
+import http from 'k6/http';
+import { parseHTML } from 'k6/html';
+
+export default function () {
+  const res = http.get('https://test.k6.io');
+  const doc = parseHTML(res.body);
+  
+  const links = [];
+  
+  doc.find('a').each((index, element) => {
+    const href = element.attr('href');
+    if (href) {
+      links.push(href);
+    }
+  });
+  
+  console.log(`Found ${links.length} links`);
+}
+```
+</CodeGroup>
+
+### Data Extraction and Validation
+
+```javascript
+import http from 'k6/http';
+import { parseHTML } from 'k6/html';
+import { check } from 'k6';
+
+export default function () {
+  const res = http.get('https://test.k6.io/news.php');
+  const doc = parseHTML(res.body);
+  
+  // Extract all article titles
+  const articles = doc.find('article h2').map((i, el) => el.text());
+  
+  check(articles, {
+    'has articles': (a) => a.length > 0,
+    'first article exists': (a) => a[0] !== undefined,
+  });
+  
+  // Extract form action URL
+  const formAction = doc.find('form').attr('action');
+  console.log(`Form submits to: ${formAction}`);
+}
+```
+
+### Working with Tables
+
+```javascript
+import http from 'k6/http';
+import { parseHTML } from 'k6/html';
+
+export default function () {
+  const res = http.get('https://test.k6.io/contacts.php');
+  const doc = parseHTML(res.body);
+  
+  const contacts = [];
+  
+  doc.find('table tbody tr').each((index, row) => {
+    const cells = row.find('td');
+    
+    contacts.push({
+      name: cells.eq(0).text(),
+      email: cells.eq(1).text(),
+      phone: cells.eq(2).text(),
+    });
+  });
+  
+  console.log(`Extracted ${contacts.length} contacts`);
+  console.log('First contact:', JSON.stringify(contacts[0]));
+}
+```
+
+### Form Data Extraction
+
+```javascript
+import http from 'k6/http';
+import { parseHTML } from 'k6/html';
+
+export default function () {
+  const res = http.get('https://test.k6.io/my_messages.php');
+  const doc = parseHTML(res.body);
+  
+  // Extract CSRF token from hidden input
+  const csrfToken = doc.find('input[name="csrf_token"]').attr('value');
+  
+  // Extract form action
+  const formAction = doc.find('form').attr('action');
+  
+  console.log(`CSRF Token: ${csrfToken}`);
+  console.log(`Form Action: ${formAction}`);
+  
+  // Use extracted data in subsequent request
+  http.post(`https://test.k6.io${formAction}`, {
+    csrf_token: csrfToken,
+    message: 'Test message',
+  });
+}
+```
+
+### CSS Selector Examples
+
+```javascript
+import http from 'k6/http';
+import { parseHTML } from 'k6/html';
+
+export default function () {
+  const res = http.get('https://test.k6.io');
+  const doc = parseHTML(res.body);
+  
+  // Select by tag
+  const allDivs = doc.find('div');
+  
+  // Select by ID
+  const header = doc.find('#header');
+  
+  // Select by class
+  const cards = doc.find('.card');
+  
+  // Select by attribute
+  const externalLinks = doc.find('a[target="_blank"]');
+  
+  // Complex selector
+  const navLinks = doc.find('nav ul li a');
+  
+  // Attribute contains
+  const images = doc.find('img[src*=".png"]');
+  
+  // Multiple selectors
+  const headings = doc.find('h1, h2, h3');
+  
+  console.log(`Found ${navLinks.size()} navigation links`);
+}
+```
+
+### Content Verification
+
+```javascript
+import http from 'k6/http';
+import { parseHTML } from 'k6/html';
+import { check } from 'k6';
+
+export default function () {
+  const res = http.get('https://test.k6.io');
+  const doc = parseHTML(res.body);
+  
+  check(doc, {
+    'has login form': (d) => d.find('form#login').size() > 0,
+    'has footer': (d) => d.find('footer').size() > 0,
+    'has navigation': (d) => d.find('nav').size() > 0,
+    'logo image present': (d) => d.find('img.logo').size() > 0,
+  });
+  
+  // Verify specific text content
+  const welcomeText = doc.find('.welcome').text();
+  check(welcomeText, {
+    'welcome message contains "k6"': (text) => text.includes('k6'),
+  });
+}
+```
+
+## Common Use Cases
+
+### Web Scraping for Test Data
+
+Extract dynamic values from HTML to use in subsequent requests:
+- CSRF tokens from forms
+- Session identifiers from hidden fields
+- Product IDs from listings
+- Dynamic URLs from navigation
+
+### HTML Structure Validation
+
+Verify that pages contain expected elements:
+- Forms have required fields
+- Navigation links are present
+- Images have alt text
+- Headers follow hierarchy
+
+### Content Verification
+
+Validate page content matches requirements:
+- Check for specific text or messages
+- Verify data is displayed correctly
+- Ensure error messages appear when expected
+- Validate dynamic content rendering
+
+## Performance Considerations
+
+<Note>
+HTML parsing has overhead. For high-performance tests:
+- Only parse when you need to extract data
+- Use `http` response checks for simple validation
+- Cache parsed documents if parsing the same content multiple times
+- Consider using `check()` on response body strings for simple text matching
+</Note>
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="HTTP Module" icon="globe" href="/api/k6-http">
+    Make HTTP requests
+  </Card>
+  <Card title="Checks" icon="check" href="/api/checks">
+    Validate responses
+  </Card>
+  <Card title="CSS Selectors" icon="crosshairs" href="https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Selectors">
+    Learn CSS selector syntax
+  </Card>
+  <Card title="Data Correlation" icon="link" href="/guides/data-correlation">
+    Extract and reuse dynamic data
+  </Card>
+</CardGroup>

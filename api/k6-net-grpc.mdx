@@ -1,0 +1,372 @@
+---
+title: 'k6/net/grpc'
+description: 'gRPC client for making Remote Procedure Calls over HTTP/2'
+icon: 'network-wired'
+---
+
+The `k6/net/grpc` module provides a [gRPC](https://grpc.io/) client for making Remote Procedure Calls (RPC) over HTTP/2.
+
+## Overview
+
+Use this module to test gRPC services by making unary and streaming RPC calls. The module supports loading protocol buffer definitions, establishing connections, and invoking RPC methods with full support for metadata and parameters.
+
+## Importing the Module
+
+```javascript
+import grpc from 'k6/net/grpc';
+```
+
+## API Reference
+
+### Client Class
+
+<ResponseField name="new grpc.Client()" type="constructor">
+  Creates a new gRPC client for making RPC calls to a gRPC server.
+</ResponseField>
+
+#### Client Methods
+
+<ResponseField name="Client.load(importPaths, ...protoFiles)" type="function">
+  Loads and parses protocol buffer definitions to be made available for RPC requests.
+  
+  **Parameters:**
+  <ParamField path="importPaths" type="string | string[]">
+    Paths to search for imported proto files. Use `null` to load from current directory.
+  </ParamField>
+  
+  <ParamField path="protoFiles" type="...string" required>
+    One or more proto file paths to load
+  </ParamField>
+</ResponseField>
+
+<ResponseField name="Client.connect(address, params)" type="function">
+  Connects to a gRPC service.
+  
+  **Parameters:**
+  <ParamField path="address" type="string" required>
+    Server address (e.g., `grpc.example.com:443`)
+  </ParamField>
+  
+  <ParamField path="params" type="Params">
+    Connection parameters (TLS, credentials, timeout, etc.)
+  </ParamField>
+</ResponseField>
+
+<ResponseField name="Client.invoke(url, request, params)" type="function">
+  Makes a unary RPC call for the given service/method.
+  
+  **Parameters:**
+  <ParamField path="url" type="string" required>
+    RPC method in format `package.Service/Method`
+  </ParamField>
+  
+  <ParamField path="request" type="object" required>
+    Request message object matching the proto definition
+  </ParamField>
+  
+  <ParamField path="params" type="Params">
+    Request-specific parameters (metadata, tags, timeout)
+  </ParamField>
+  
+  **Returns:**
+  <ResponseField name="response" type="Response">
+    gRPC response object
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="Client.asyncInvoke(url, request, params)" type="function">
+  Asynchronously makes a unary RPC call for the given service/method.
+  
+  **Parameters:**
+  <ParamField path="url" type="string" required>
+    RPC method in format `package.Service/Method`
+  </ParamField>
+  
+  <ParamField path="request" type="object" required>
+    Request message object matching the proto definition
+  </ParamField>
+  
+  <ParamField path="params" type="Params">
+    Request-specific parameters
+  </ParamField>
+  
+  **Returns:**
+  <ResponseField name="promise" type="Promise<Response>">
+    Promise that resolves to a gRPC Response
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="Client.close()" type="function">
+  Closes the connection to the gRPC service.
+</ResponseField>
+
+### Response Object
+
+<ParamField path="status" type="number">
+  gRPC status code (see Constants below)
+</ParamField>
+
+<ParamField path="message" type="object">
+  Response message from the server
+</ParamField>
+
+<ParamField path="headers" type="object">
+  Response headers/metadata
+</ParamField>
+
+<ParamField path="trailers" type="object">
+  Response trailers/metadata
+</ParamField>
+
+<ParamField path="error" type="object">
+  Error information if the call failed
+</ParamField>
+
+### Params Object
+
+<ParamField path="metadata" type="object">
+  Custom metadata to send with the request as key-value pairs.
+</ParamField>
+
+<ParamField path="tags" type="object">
+  Custom metric tags for filtering results and setting thresholds.
+</ParamField>
+
+<ParamField path="timeout" type="string">
+  Request timeout (e.g., `"10s"`, `"500ms"`)
+</ParamField>
+
+<ParamField path="plaintext" type="boolean">
+  Use plaintext connection (no TLS). Default: `false`
+</ParamField>
+
+## Status Constants
+
+The module provides constants to distinguish between gRPC response statuses:
+
+| Constant | Description |
+|----------|-------------|
+| `StatusOK` | Success |
+| `StatusCanceled` | Operation canceled (typically by caller) |
+| `StatusUnknown` | Unknown error |
+| `StatusInvalidArgument` | Client specified invalid argument |
+| `StatusDeadlineExceeded` | Operation expired before completion |
+| `StatusNotFound` | Requested entity not found |
+| `StatusAlreadyExists` | Entity already exists |
+| `StatusPermissionDenied` | Caller lacks permission |
+| `StatusResourceExhausted` | Resource exhausted (quota, space, etc.) |
+| `StatusFailedPrecondition` | System not in required state |
+| `StatusAborted` | Operation aborted (concurrency issue) |
+| `StatusOutOfRange` | Operation past valid range |
+| `StatusUnimplemented` | Operation not implemented or supported |
+| `StatusInternal` | Internal errors |
+| `StatusUnavailable` | Service currently unavailable (transient) |
+| `StatusDataLoss` | Unrecoverable data loss or corruption |
+| `StatusUnauthenticated` | Request lacks valid authentication |
+
+## Stream Support
+
+For bidirectional and streaming RPCs:
+
+<ResponseField name="new grpc.Stream(client, url, params)" type="constructor">
+  Creates a new gRPC stream for bidirectional or streaming calls.
+</ResponseField>
+
+<ResponseField name="Stream.on(event, handler)" type="function">
+  Adds an event listener for stream events: `data`, `error`, `end`
+</ResponseField>
+
+<ResponseField name="Stream.write(message)" type="function">
+  Writes a message to the stream.
+</ResponseField>
+
+<ResponseField name="Stream.end()" type="function">
+  Signals to the server that the client has finished sending.
+</ResponseField>
+
+## gRPC Metrics
+
+k6 automatically collects gRPC-specific metrics:
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `grpc_req_duration` | Trend | Total request duration |
+| `grpc_streams` | Counter | Total number of streams |
+| `grpc_streams_msgs_sent` | Counter | Messages sent |
+| `grpc_streams_msgs_received` | Counter | Messages received |
+
+## Examples
+
+### Basic Unary RPC
+
+<CodeGroup>
+```javascript Simple Unary Call
+import grpc from 'k6/net/grpc';
+import { check, sleep } from 'k6';
+
+const client = new grpc.Client();
+client.load(null, 'quickpizza.proto');
+
+export default () => {
+  client.connect('grpc-quickpizza.grafana.com:443', {
+    // plaintext: false
+  });
+
+  const data = { ingredients: ['Cheese'], dough: 'Thick' };
+  const response = client.invoke('quickpizza.GRPC/RatePizza', data);
+
+  check(response, {
+    'status is OK': (r) => r && r.status === grpc.StatusOK,
+  });
+
+  console.log(JSON.stringify(response.message));
+
+  client.close();
+  sleep(1);
+};
+```
+
+```javascript With Metadata and Tags
+import grpc from 'k6/net/grpc';
+import { check } from 'k6';
+
+const client = new grpc.Client();
+client.load(['./protos'], 'service.proto');
+
+export default () => {
+  client.connect('localhost:50051', { plaintext: true });
+
+  const params = {
+    metadata: {
+      'x-client-id': 'k6-test',
+      'authorization': 'Bearer token123',
+    },
+    tags: { rpc_type: 'unary' },
+  };
+
+  const response = client.invoke(
+    'mypackage.MyService/MyMethod',
+    { name: 'k6' },
+    params
+  );
+
+  check(response, {
+    'status is OK': (r) => r.status === grpc.StatusOK,
+    'response has data': (r) => r.message && r.message.result,
+  });
+
+  client.close();
+};
+```
+</CodeGroup>
+
+### Async Invocation
+
+```javascript
+import grpc from 'k6/net/grpc';
+import { check } from 'k6';
+
+const client = new grpc.Client();
+client.load(null, 'service.proto');
+
+export default async () => {
+  client.connect('grpc.example.com:443');
+
+  // Make multiple concurrent requests
+  const promises = [
+    client.asyncInvoke('service.API/Method1', { id: 1 }),
+    client.asyncInvoke('service.API/Method2', { id: 2 }),
+    client.asyncInvoke('service.API/Method3', { id: 3 }),
+  ];
+
+  const responses = await Promise.all(promises);
+
+  responses.forEach((response, i) => {
+    check(response, {
+      [`request ${i} status is OK`]: (r) => r.status === grpc.StatusOK,
+    });
+  });
+
+  client.close();
+};
+```
+
+### Streaming RPC
+
+```javascript
+import grpc from 'k6/net/grpc';
+
+const client = new grpc.Client();
+client.load(null, 'service.proto');
+
+export default () => {
+  client.connect('localhost:50051', { plaintext: true });
+
+  const stream = new grpc.Stream(client, 'service.API/BiDiStream');
+
+  stream.on('data', (message) => {
+    console.log('Received:', JSON.stringify(message));
+  });
+
+  stream.on('error', (err) => {
+    console.error('Stream error:', err);
+  });
+
+  stream.on('end', () => {
+    console.log('Stream ended');
+    client.close();
+  });
+
+  // Send messages
+  stream.write({ message: 'Hello' });
+  stream.write({ message: 'World' });
+  
+  // Signal we're done sending
+  stream.end();
+};
+```
+
+### Status Code Checking
+
+```javascript
+import grpc from 'k6/net/grpc';
+import { check } from 'k6';
+
+const client = new grpc.Client();
+client.load(null, 'service.proto');
+
+export default () => {
+  client.connect('grpc.example.com:443');
+
+  const response = client.invoke('service.API/GetUser', { id: 'invalid' });
+
+  check(response, {
+    'status is OK': (r) => r.status === grpc.StatusOK,
+    'status is NOT_FOUND': (r) => r.status === grpc.StatusNotFound,
+    'status is INVALID_ARGUMENT': (r) => r.status === grpc.StatusInvalidArgument,
+  });
+
+  if (response.status !== grpc.StatusOK) {
+    console.error(`gRPC error: ${response.error.message}`);
+  }
+
+  client.close();
+};
+```
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="Response Object" icon="message" href="/api/grpc-response">
+    gRPC response structure
+  </Card>
+  <Card title="Stream" icon="water" href="/api/grpc-stream">
+    Streaming RPC support
+  </Card>
+  <Card title="gRPC Testing Guide" icon="book" href="/guides/grpc-testing">
+    Learn gRPC testing patterns
+  </Card>
+  <Card title="Protocol Buffers" icon="file-code" href="https://protobuf.dev/">
+    Protocol buffer documentation
+  </Card>
+</CardGroup>

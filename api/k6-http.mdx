@@ -1,0 +1,337 @@
+---
+title: k6/http
+description: HTTP request module for making REST API calls and HTTP requests
+---
+
+The k6/http module contains functionality for performing HTTP transactions. This is the primary module for load testing HTTP services.
+
+## Import
+
+```javascript
+import http from 'k6/http';
+```
+
+## HTTP Methods
+
+### get()
+
+Issues an HTTP GET request.
+
+<ParamField path="url" type="string | HTTP URL" required>
+  Request URL (e.g. `http://example.com`).
+</ParamField>
+
+<ParamField path="params" type="object">
+  Params object containing additional request parameters like headers, tags, etc.
+</ParamField>
+
+<ResponseField name="return" type="Response">
+  HTTP Response object.
+</ResponseField>
+
+```javascript
+import http from 'k6/http';
+
+export default function () {
+  const res = http.get('https://test.k6.io');
+  console.log(JSON.stringify(res.headers));
+}
+```
+
+---
+
+### post()
+
+Issues an HTTP POST request.
+
+<ParamField path="url" type="string | HTTP URL" required>
+  Request URL (e.g. `http://example.com`).
+</ParamField>
+
+<ParamField path="body" type="string | object | ArrayBuffer">
+  Request body. Objects will be automatically `x-www-form-urlencoded`.
+</ParamField>
+
+<ParamField path="params" type="object">
+  Params object containing additional request parameters.
+</ParamField>
+
+<ResponseField name="return" type="Response">
+  HTTP Response object.
+</ResponseField>
+
+<CodeGroup>
+```javascript JSON body
+import http from 'k6/http';
+
+const url = 'https://quickpizza.grafana.com/api/json';
+
+export default function () {
+  let data = { name: 'Bert' };
+
+  // Using a JSON string as body
+  let res = http.post(url, JSON.stringify(data), {
+    headers: { 'Content-Type': 'application/json' },
+  });
+  console.log(res.json().json.name); // Bert
+}
+```
+
+```javascript Form data
+import http from 'k6/http';
+
+const url = 'https://quickpizza.grafana.com/api/json';
+
+export default function () {
+  let data = { name: 'Bert' };
+
+  // Using an object as body, headers will automatically include
+  // 'Content-Type: application/x-www-form-urlencoded'
+  let res = http.post(url, data);
+  console.log(res.json().form.name); // Bert
+}
+```
+
+```javascript Binary data
+import http from 'k6/http';
+
+const url = 'https://quickpizza.grafana.com/api/json';
+const logoBin = open('./logo.png', 'b');
+
+export default function () {
+  // Using a binary array as body
+  http.post(url, logoBin, { headers: { 'Content-Type': 'image/png' } });
+}
+```
+</CodeGroup>
+
+---
+
+### put()
+
+Issues an HTTP PUT request.
+
+<ParamField path="url" type="string | HTTP URL" required>
+  Request URL (e.g. `http://example.com`).
+</ParamField>
+
+<ParamField path="body" type="string | object | ArrayBuffer">
+  Request body. Objects will be `x-www-form-urlencoded`.
+</ParamField>
+
+<ParamField path="params" type="object">
+  Params object containing additional request parameters.
+</ParamField>
+
+<ResponseField name="return" type="Response">
+  HTTP Response object.
+</ResponseField>
+
+```javascript
+import http from 'k6/http';
+
+const url = 'https://quickpizza.grafana.com/api/put';
+
+export default function () {
+  const headers = { 'Content-Type': 'application/json' };
+  const data = { name: 'Bert' };
+
+  const res = http.put(url, JSON.stringify(data), { headers: headers });
+
+  console.log(JSON.parse(res.body).name);
+}
+```
+
+---
+
+### del()
+
+Issues an HTTP DELETE request.
+
+<ParamField path="url" type="string | HTTP URL" required>
+  Request URL (e.g. `http://example.com`).
+</ParamField>
+
+<ParamField path="body" type="string | object | ArrayBuffer">
+  Request body (optional, discouraged). Sending a DELETE request with a body has no defined semantics and may cause some servers to reject it.
+</ParamField>
+
+<ParamField path="params" type="object">
+  Params object containing additional request parameters.
+</ParamField>
+
+<ResponseField name="return" type="Response">
+  HTTP Response object.
+</ResponseField>
+
+```javascript
+import http from 'k6/http';
+
+const url = 'https://quickpizza.grafana.com/api/delete';
+
+export default function () {
+  const params = { headers: { 'X-MyHeader': 'k6test' } };
+  http.del(url, null, params);
+}
+```
+
+---
+
+### request()
+
+Issues any type of HTTP request with a custom method.
+
+<ParamField path="method" type="string" required>
+  Request method (e.g. `'POST'`). Must be uppercase.
+</ParamField>
+
+<ParamField path="url" type="string | HTTP URL" required>
+  Request URL (e.g. `'http://example.com'`).
+</ParamField>
+
+<ParamField path="body" type="string | object | ArrayBuffer">
+  Request body. Objects will be `x-www-form-urlencoded` encoded.
+</ParamField>
+
+<ParamField path="params" type="object">
+  Params object containing additional request parameters.
+</ParamField>
+
+<ResponseField name="return" type="Response">
+  HTTP Response object.
+</ResponseField>
+
+```javascript
+import http from 'k6/http';
+
+const url = 'https://quickpizza.grafana.com/api/post';
+
+export default function () {
+  const data = { name: 'Bert' };
+
+  // Using a JSON string as body
+  let res = http.request('POST', url, JSON.stringify(data), {
+    headers: { 'Content-Type': 'application/json' },
+  });
+  console.log(res.json().name); // Bert
+
+  // Using an object as body
+  res = http.request('POST', url, data);
+  console.log(res.body); // name=Bert
+}
+```
+
+---
+
+### batch()
+
+Issues multiple HTTP requests in parallel (like browsers do).
+
+<ParamField path="requests" type="array | object" required>
+  An array or object containing requests, in string or object form.
+</ParamField>
+
+<ResponseField name="return" type="object | array">
+  Returns Response objects. It's an array when you pass an array as requests, and an object with string keys when you use named requests.
+</ResponseField>
+
+<Info>
+To set batch size, use the `batchPerHost` option in your test configuration.
+</Info>
+
+<Tabs>
+  <Tab title="Array of strings">
+    ```javascript
+    import { check } from 'k6';
+    import http from 'k6/http';
+
+    export default function () {
+      const responses = http.batch(['http://test.k6.io', 'http://test.k6.io/pi.php']);
+
+      check(responses[0], {
+        'main page 200': (res) => res.status === 200,
+      });
+
+      check(responses[1], {
+        'pi page 200': (res) => res.status === 200,
+        'pi page has right content': (res) => res.body === '3.14',
+      });
+    }
+    ```
+  </Tab>
+
+  <Tab title="Array of arrays">
+    ```javascript
+    import http from 'k6/http';
+    import { check } from 'k6';
+
+    export default function () {
+      const responses = http.batch([
+        ['GET', 'https://test.k6.io', null, { tags: { ctype: 'html' } }],
+        ['GET', 'https://test.k6.io/style.css', null, { tags: { ctype: 'css' } }],
+        ['GET', 'https://test.k6.io/images/logo.png', null, { tags: { ctype: 'images' } }],
+      ]);
+      check(responses[0], {
+        'main page status was 200': (res) => res.status === 200,
+      });
+    }
+    ```
+  </Tab>
+
+  <Tab title="Array of objects">
+    ```javascript
+    import http from 'k6/http';
+    import { check } from 'k6';
+
+    export default function () {
+      const req1 = {
+        method: 'GET',
+        url: 'https://quickpizza.grafana.com/api/get',
+      };
+      const req2 = {
+        method: 'DELETE',
+        url: 'https://quickpizza.grafana.com/api/delete',
+      };
+      const req3 = {
+        method: 'POST',
+        url: 'https://quickpizza.grafana.com/api/post',
+        body: JSON.stringify({ hello: 'world!' }),
+        params: {
+          headers: { 'Content-Type': 'application/json' },
+        },
+      };
+      const responses = http.batch([req1, req2, req3]);
+      check(responses[2], {
+        'form data OK': (res) => JSON.parse(res.body)['hello'] == 'world!',
+      });
+    }
+    ```
+  </Tab>
+
+  <Tab title="Named requests">
+    ```javascript
+    import http from 'k6/http';
+    import { check } from 'k6';
+
+    export default function () {
+      const requests = {
+        'front page': 'https://k6.io',
+        'features page': {
+          method: 'GET',
+          url: 'https://k6.io/features',
+          params: { headers: { 'User-Agent': 'k6' } },
+        },
+      };
+      const responses = http.batch(requests);
+      // Access results using the request name as index
+      check(responses['front page'], {
+        'front page status was 200': (res) => res.status === 200,
+      });
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+When using arrays to define requests, use the specific order: `[method, url, body, params]`.
+</Note>

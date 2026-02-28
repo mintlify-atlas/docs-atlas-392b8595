@@ -1,0 +1,473 @@
+---
+title: 'Thresholds'
+description: 'Define pass/fail criteria for your k6 tests using thresholds to ensure your system meets performance requirements.'
+---
+
+Thresholds define the pass/fail criteria for your load tests. If your system doesn't meet the threshold conditions, **the test fails with a non-zero exit code.**
+
+Thresholds let you codify your Service Level Objectives (SLOs) and automate performance testing.
+
+## How thresholds work
+
+Thresholds evaluate metrics against specified conditions. Common examples include:
+
+- Less than 1% of requests return errors
+- 95% of requests complete within 200ms
+- 99% of requests complete within 400ms
+- Specific endpoints always respond within 300ms
+
+When any threshold fails, k6 exits with a non-zero exit code, making thresholds essential for CI/CD integration.
+
+## Basic example
+
+This test defines two thresholds:
+
+```javascript
+import http from 'k6/http';
+
+export const options = {
+  thresholds: {
+    http_req_failed: ['rate<0.01'], // HTTP errors should be less than 1%
+    http_req_duration: ['p(95)<200'], // 95% of requests should be below 200ms
+  },
+};
+
+export default function () {
+  http.get('https://quickpizza.grafana.com');
+}
+```
+
+When you run this test, k6 displays threshold results:
+
+```bash
+  █ THRESHOLDS
+
+    http_req_duration
+    ✓ 'p(95)<200' p(95)=148.21ms
+
+    http_req_failed
+    ✓ 'rate<0.01' rate=0.05%
+```
+
+The green checkmarks (✓) indicate passing thresholds. Failed thresholds show a red cross (✗) and cause the test to exit with code 1.
+
+## Threshold syntax
+
+Thresholds use this format:
+
+```javascript
+export const options = {
+  thresholds: {
+    metric_name: ['threshold_expression'],
+  },
+};
+```
+
+### Threshold expressions
+
+A threshold expression has three parts:
+
+```
+<aggregation_method> <operator> <value>
+```
+
+Examples:
+- `avg < 200` - Average duration must be less than 200ms
+- `count >= 500` - Count must be at least 500
+- `p(90) < 300` - 90th percentile must be below 300ms
+
+## Aggregation methods by metric type
+
+Different metric types support different aggregation methods:
+
+<Tabs>
+  <Tab title="Counter">
+    ```javascript
+    thresholds: {
+      my_counter: [
+        'count>100',  // Total count
+        'rate>0.5',   // Rate of non-zero values
+      ],
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Gauge">
+    ```javascript
+    thresholds: {
+      my_gauge: [
+        'value<100',  // Current value
+      ],
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Rate">
+    ```javascript
+    thresholds: {
+      my_rate: [
+        'rate>0.9',   // Rate of non-zero values
+      ],
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Trend">
+    ```javascript
+    thresholds: {
+      my_trend: [
+        'avg<100',     // Average
+        'min>50',      // Minimum
+        'max<500',     // Maximum
+        'med<200',     // Median
+        'p(90)<300',   // 90th percentile
+        'p(95)<400',   // 95th percentile
+        'p(99.9)<1000', // 99.9th percentile
+      ],
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Common threshold examples
+
+### Error rate threshold
+
+Ensure error rate stays below 1%:
+
+```javascript
+import http from 'k6/http';
+import { sleep } from 'k6';
+
+export const options = {
+  thresholds: {
+    http_req_failed: ['rate<0.01'],
+  },
+};
+
+export default function () {
+  http.get('https://quickpizza.grafana.com');
+  sleep(1);
+}
+```
+
+### Response time threshold
+
+Ensure 90% of requests complete within 400ms:
+
+```javascript
+import http from 'k6/http';
+import { sleep } from 'k6';
+
+export const options = {
+  thresholds: {
+    http_req_duration: ['p(90) < 400'],
+  },
+};
+
+export default function () {
+  http.get('https://quickpizza.grafana.com');
+  sleep(1);
+}
+```
+
+### Multiple thresholds on one metric
+
+Define different requirements for different percentiles:
+
+```javascript
+import http from 'k6/http';
+import { sleep } from 'k6';
+
+export const options = {
+  thresholds: {
+    http_req_duration: [
+      'p(90) < 400',   // 90% under 400ms
+      'p(95) < 800',   // 95% under 800ms
+      'p(99.9) < 2000', // 99.9% under 2s
+    ],
+  },
+};
+
+export default function () {
+  http.get('https://quickpizza.grafana.com');
+  sleep(1);
+}
+```
+
+## Thresholds with custom metrics
+
+You can set thresholds on custom metrics:
+
+```javascript
+import http from 'k6/http';
+import { Trend, Rate, Counter, Gauge } from 'k6/metrics';
+import { sleep } from 'k6';
+
+const TrendRTT = new Trend('RTT');
+const RateContentOK = new Rate('ContentOK');
+const GaugeContentSize = new Gauge('ContentSize');
+const CounterErrors = new Counter('Errors');
+
+export const options = {
+  thresholds: {
+    Errors: ['count<100'],          // Less than 100 errors
+    ContentSize: ['value<4000'],    // Content under 4000 bytes
+    ContentOK: ['rate>0.95'],       // 95% content OK
+    RTT: [
+      'p(99)<300',   // 99th percentile under 300ms
+      'p(70)<250',   // 70th percentile under 250ms
+      'avg<200',     // Average under 200ms
+      'med<150',     // Median under 150ms
+      'min<100',     // Minimum under 100ms
+    ],
+  },
+};
+
+export default function () {
+  const res = http.get('https://quickpizza.grafana.com/api/json?name=Bert');
+  const contentOK = res.json('name') === 'Bert';
+
+  TrendRTT.add(res.timings.duration);
+  RateContentOK.add(contentOK);
+  GaugeContentSize.add(res.body.length);
+  CounterErrors.add(!contentOK);
+
+  sleep(1);
+}
+```
+
+## Thresholds on tagged metrics
+
+Set thresholds for specific tagged requests:
+
+```javascript
+import http from 'k6/http';
+import { sleep } from 'k6';
+
+export const options = {
+  thresholds: {
+    'http_req_duration{type:API}': ['p(95)<500'],
+    'http_req_duration{type:staticContent}': ['p(95)<200'],
+  },
+};
+
+export default function () {
+  http.get('https://quickpizza.grafana.com/api/headers', {
+    tags: { type: 'API' },
+  });
+  
+  http.get('https://quickpizza.grafana.com/api/json', {
+    tags: { type: 'API' },
+  });
+
+  http.batch([
+    ['GET', 'https://quickpizza.grafana.com/favicon.ico', null, 
+     { tags: { type: 'staticContent' } }],
+    ['GET', 'https://quickpizza.grafana.com/admin', null, 
+     { tags: { type: 'staticContent' } }],
+  ]);
+
+  sleep(1);
+}
+```
+
+## Thresholds on groups
+
+Set thresholds for specific groups:
+
+```javascript
+import http from 'k6/http';
+import { group, sleep } from 'k6';
+
+export const options = {
+  thresholds: {
+    'group_duration{group:::individualRequests}': ['avg < 400'],
+    'group_duration{group:::batchRequests}': ['avg < 200'],
+  },
+  vus: 1,
+  duration: '10s',
+};
+
+export default function () {
+  group('individualRequests', function () {
+    http.get('https://quickpizza.grafana.com/api/json?letter=a');
+    http.get('https://quickpizza.grafana.com/api/json?letter=b');
+    http.get('https://quickpizza.grafana.com/api/json?letter=c');
+  });
+
+  group('batchRequests', function () {
+    http.batch([
+      ['GET', 'https://quickpizza.grafana.com/api/json?letter=a'],
+      ['GET', 'https://quickpizza.grafana.com/api/json?letter=b'],
+      ['GET', 'https://quickpizza.grafana.com/api/json?letter=c'],
+    ]);
+  });
+
+  sleep(1);
+}
+```
+
+## Abort test when threshold fails
+
+Stop the test immediately when a threshold fails:
+
+```javascript
+import http from 'k6/http';
+
+export const options = {
+  vus: 30,
+  duration: '2m',
+  thresholds: {
+    http_req_duration: [
+      { 
+        threshold: 'p(99) < 10',
+        abortOnFail: true,
+        delayAbortEval: '10s', // Wait 10s before checking
+      }
+    ],
+  },
+};
+
+export default function () {
+  http.get('https://quickpizza.grafana.com');
+}
+```
+
+<Note>
+  The `delayAbortEval` property prevents premature test abortion by waiting for enough samples to be collected.
+</Note>
+
+## Fail test using checks
+
+Combine checks with thresholds to fail tests based on check results:
+
+```javascript
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+
+export const options = {
+  vus: 50,
+  duration: '10s',
+  thresholds: {
+    checks: ['rate>0.9'], // 90% of checks must pass
+  },
+};
+
+export default function () {
+  const res = http.get('https://quickpizza.grafana.com/');
+
+  check(res, {
+    'status is 200': (r) => r.status == 200,
+    'response time < 500ms': (r) => r.timings.duration < 500,
+  });
+
+  sleep(1);
+}
+```
+
+### Thresholds on specific checks
+
+Use tags to set thresholds for specific checks:
+
+```javascript
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+
+export const options = {
+  vus: 50,
+  duration: '10s',
+  thresholds: {
+    'checks{myTag:critical}': ['rate>0.99'],
+  },
+};
+
+export default function () {
+  const res = http.get('https://quickpizza.grafana.com/');
+  
+  check(
+    res,
+    { 'status is 200': (r) => r.status == 200 },
+    { myTag: 'critical' }
+  );
+
+  sleep(1);
+}
+```
+
+## Complete example
+
+Here's a comprehensive example combining multiple threshold patterns:
+
+```javascript
+import http from 'k6/http';
+import { check, sleep, group } from 'k6';
+import { Trend } from 'k6/metrics';
+
+const apiDuration = new Trend('api_duration');
+
+export const options = {
+  vus: 50,
+  duration: '1m',
+  thresholds: {
+    // Built-in metrics
+    http_req_failed: ['rate<0.01'],
+    http_req_duration: ['p(95)<500', 'p(99)<1000'],
+    
+    // Tagged metrics
+    'http_req_duration{type:api}': ['p(95)<300'],
+    'http_req_duration{type:static}': ['p(95)<100'],
+    
+    // Groups
+    'group_duration{group:::API}': ['avg<400'],
+    
+    // Custom metrics
+    api_duration: ['p(90)<250'],
+    
+    // Checks
+    checks: ['rate>0.95'],
+  },
+};
+
+const baseUrl = 'https://quickpizza.grafana.com';
+
+export default function () {
+  group('API', function () {
+    const res = http.get(`${baseUrl}/api/pizzas`, {
+      tags: { type: 'api' },
+    });
+    
+    apiDuration.add(res.timings.duration);
+    
+    check(res, {
+      'api status is 200': (r) => r.status === 200,
+    });
+  });
+  
+  http.get(`${baseUrl}/static/logo.png`, {
+    tags: { type: 'static' },
+  });
+  
+  sleep(1);
+}
+```
+
+## Best practices
+
+<CardGroup cols={2}>
+  <Card title="Start with SLOs" icon="flag">
+    Base thresholds on your Service Level Objectives, not arbitrary numbers.
+  </Card>
+  
+  <Card title="Use multiple percentiles" icon="percent">
+    Don't rely on averages alone. Check p95, p99, and max values.
+  </Card>
+  
+  <Card title="Tag for granularity" icon="tags">
+    Use tags to set different thresholds for different request types.
+  </Card>
+  
+  <Card title="Delay abort evaluation" icon="clock">
+    Use delayAbortEval to prevent premature test abortion.
+  </Card>
+</CardGroup>

@@ -1,0 +1,309 @@
+---
+title: 'Checks'
+description: 'Use checks to validate that your system responds correctly during load tests without halting test execution.'
+---
+
+Checks validate boolean conditions in your k6 tests. They're similar to assertions in other testing frameworks, but with one crucial difference: **failed checks don't stop the test.**
+
+Instead, k6 tracks the pass/fail rate of checks and continues executing the test.
+
+## How checks work
+
+Checks validate that your system responds correctly. For example, you might check that:
+- A POST request returns status 201
+- A response body contains expected text
+- A response completes within a time limit
+
+k6 tracks each check as a [rate metric](https://grafana.com/docs/k6/latest/using-k6/metrics), recording the percentage of passing checks.
+
+<Note>
+  To make a failed check abort or fail the entire test, combine checks with [Thresholds](/using-k6/thresholds).
+</Note>
+
+## Check for HTTP response code
+
+The most common check validates the HTTP status code:
+
+```javascript
+import { check } from 'k6';
+import http from 'k6/http';
+
+export default function () {
+  const res = http.get('http://test.k6.io/');
+  check(res, {
+    'is status 200': (r) => r.status === 200,
+  });
+}
+```
+
+The check function takes:
+1. The value to check (usually the response object)
+2. An object mapping check names to validation functions
+
+## Check for response body content
+
+Sometimes an HTTP 200 response contains an error message. Validate the response body to catch these cases:
+
+```javascript
+import { check } from 'k6';
+import http from 'k6/http';
+
+export default function () {
+  const res = http.get('http://test.k6.io/');
+  check(res, {
+    'verify homepage text': (r) =>
+      r.body.includes('Collection of simple web-pages suitable for load testing'),
+  });
+}
+```
+
+## Check for response body size
+
+You can verify response body size to detect unexpected changes:
+
+```javascript
+import { check } from 'k6';
+import http from 'k6/http';
+
+export default function () {
+  const res = http.get('http://test.k6.io/');
+  check(res, {
+    'body size is 11,105 bytes': (r) => r.body.length == 11105,
+  });
+}
+```
+
+## Multiple checks
+
+You can define multiple checks in a single `check()` statement:
+
+```javascript
+import { check } from 'k6';
+import http from 'k6/http';
+
+export default function () {
+  const res = http.get('http://test.k6.io/');
+  check(res, {
+    'is status 200': (r) => r.status === 200,
+    'body size is 11,105 bytes': (r) => r.body.length == 11105,
+    'response time < 200ms': (r) => r.timings.duration < 200,
+  });
+}
+```
+
+When you run this test, output shows each check individually:
+
+```bash
+$ k6 run checks.js
+
+  ...
+    ✓ is status 200
+    ✓ body size is 11,105 bytes
+    ✓ response time < 200ms
+
+  ...
+  checks.........................: 100.00% ✓ 3        ✗ 0
+  data_received..................: 11 kB   20 kB/s
+```
+
+## Check results in output
+
+When your script includes checks, the end-of-test summary displays check statistics:
+
+```bash
+$ k6 run script.js
+
+  ...
+    ✓ is status 200
+
+  ...
+  checks.........................: 100.00% ✓ 1        ✗ 0
+  data_received..................: 11 kB   12 kB/s
+```
+
+This shows:
+- Individual check results (✓ for pass, ✗ for fail)
+- Overall pass rate (100.00%)
+- Total passing (✓ 1) and failing (✗ 0) checks
+
+## Common check patterns
+
+<CodeGroup>
+```javascript Status codes
+check(res, {
+  'is status 200': (r) => r.status === 200,
+  'is status 2xx': (r) => r.status >= 200 && r.status < 300,
+  'is not 404': (r) => r.status !== 404,
+});
+```
+
+```javascript Response content
+check(res, {
+  'has expected text': (r) => r.body.includes('Success'),
+  'valid JSON': (r) => {
+    try {
+      JSON.parse(r.body);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  'has user data': (r) => r.json('user.name') !== undefined,
+});
+```
+
+```javascript Response timing
+check(res, {
+  'response time < 200ms': (r) => r.timings.duration < 200,
+  'connection time < 100ms': (r) => r.timings.connecting < 100,
+  'waiting time < 150ms': (r) => r.timings.waiting < 150,
+});
+```
+
+```javascript Headers
+check(res, {
+  'has content-type': (r) => r.headers['Content-Type'] !== undefined,
+  'is JSON': (r) => r.headers['Content-Type'].includes('application/json'),
+  'has cache control': (r) => r.headers['Cache-Control'] !== undefined,
+});
+```
+</CodeGroup>
+
+## Checks vs thresholds
+
+<Warning>
+  **Checks alone don't fail tests.** A test with failing checks still exits with code 0 (success).
+</Warning>
+
+If you need the test to fail based on check results, combine checks with thresholds:
+
+```javascript
+import http from 'k6/http';
+import { check } from 'k6';
+
+export const options = {
+  vus: 50,
+  duration: '10s',
+  thresholds: {
+    // Fail the test if less than 90% of checks pass
+    checks: ['rate>0.9'],
+  },
+};
+
+export default function () {
+  const res = http.get('https://quickpizza.grafana.com/api/status/500');
+
+  check(res, {
+    'status is 500': (r) => r.status == 500,
+  });
+}
+```
+
+Now the test fails if the check success rate drops below 90%.
+
+## Check specific operations with tags
+
+Use tags to create thresholds for specific checks:
+
+```javascript
+import http from 'k6/http';
+import { check } from 'k6';
+
+export const options = {
+  vus: 50,
+  duration: '10s',
+  thresholds: {
+    'checks{myTag:critical}': ['rate>0.99'], // 99% pass rate for critical checks
+    'checks{myTag:optional}': ['rate>0.8'],  // 80% pass rate for optional checks
+  },
+};
+
+export default function () {
+  const res = http.get('https://quickpizza.grafana.com/');
+  
+  // Critical check with tag
+  check(
+    res,
+    {
+      'status is 200': (r) => r.status === 200,
+    },
+    { myTag: 'critical' }
+  );
+  
+  // Optional check with different tag
+  check(
+    res,
+    {
+      'response time < 100ms': (r) => r.timings.duration < 100,
+    },
+    { myTag: 'optional' }
+  );
+}
+```
+
+## Complete example
+
+Here's a comprehensive example demonstrating various check patterns:
+
+```javascript
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+
+export const options = {
+  vus: 10,
+  duration: '30s',
+  thresholds: {
+    checks: ['rate>0.95'], // 95% of checks must pass
+  },
+};
+
+const baseUrl = 'https://quickpizza.grafana.com';
+
+export default function () {
+  // Test homepage
+  const homeRes = http.get(baseUrl);
+  check(homeRes, {
+    'homepage status is 200': (r) => r.status === 200,
+    'homepage loads quickly': (r) => r.timings.duration < 500,
+  });
+  
+  // Test API endpoint
+  const apiRes = http.get(`${baseUrl}/api/pizzas`);
+  check(apiRes, {
+    'api status is 200': (r) => r.status === 200,
+    'api returns JSON': (r) => r.headers['Content-Type'].includes('application/json'),
+    'api has pizzas': (r) => {
+      const body = r.json();
+      return Array.isArray(body) && body.length > 0;
+    },
+  });
+  
+  // Test error handling
+  const errorRes = http.get(`${baseUrl}/api/not-found`);
+  check(errorRes, {
+    'not found returns 404': (r) => r.status === 404,
+  });
+  
+  sleep(1);
+}
+```
+
+## Best practices
+
+<CardGroup cols={2}>
+  <Card title="Use descriptive names" icon="message">
+    Make check names clear and specific so failures are easy to understand.
+  </Card>
+  
+  <Card title="Check meaningful conditions" icon="bullseye">
+    Validate actual correctness, not just status codes. Check response content too.
+  </Card>
+  
+  <Card title="Combine with thresholds" icon="flag">
+    Use thresholds to fail tests when check rates drop below acceptable levels.
+  </Card>
+  
+  <Card title="Keep checks simple" icon="minimize">
+    Each check should validate one condition. Use multiple checks for complex validation.
+  </Card>
+</CardGroup>

@@ -1,0 +1,241 @@
+---
+title: Options reference
+description: Complete reference for all k6 options that configure test-run behavior
+icon: sliders
+---
+
+# Options reference
+
+Options configure test-run behavior. Use options to define test tags, thresholds, user agents, the number of virtual users and iterations, and much more.
+
+## How to use options
+
+You can set options in multiple places with different levels of precedence:
+
+<Steps>
+  <Step title="In the script">
+    Use the `export const options` object to set default options in your script.
+
+    ```javascript
+    export const options = {
+      vus: 10,
+      duration: '30s',
+    };
+    ```
+  </Step>
+
+  <Step title="Command-line flags">
+    Override script options with CLI flags.
+
+    ```bash
+    k6 run --vus 20 --duration 1m script.js
+    ```
+  </Step>
+
+  <Step title="Environment variables">
+    Use environment variables with the `K6_` prefix.
+
+    ```bash
+    K6_VUS=20 K6_DURATION=1m k6 run script.js
+    ```
+  </Step>
+</Steps>
+
+## Order of precedence
+
+When you set options in multiple places, k6 applies them in this order (highest to lowest precedence):
+
+1. Command-line flags
+2. Environment variables
+3. Script options
+4. Default values
+
+## Common options
+
+### Virtual users and duration
+
+<ParamField path="vus" type="integer" default="1">
+  Number of virtual users to run concurrently.
+
+  ```javascript
+  export const options = {
+    vus: 10,
+  };
+  ```
+</ParamField>
+
+<ParamField path="duration" type="string" default="null">
+  Total test duration. The test will run for this duration with the specified number of VUs.
+
+  ```javascript
+  export const options = {
+    duration: '30s',
+  };
+  ```
+</ParamField>
+
+<ParamField path="iterations" type="integer" default="1">
+  Total number of iterations to execute across all VUs.
+
+  ```javascript
+  export const options = {
+    iterations: 100,
+  };
+  ```
+</ParamField>
+
+### Stages
+
+<ParamField path="stages" type="array" default="[]">
+  Ramp VUs up or down during the test.
+
+  ```javascript
+  export const options = {
+    stages: [
+      { duration: '30s', target: 20 },
+      { duration: '1m', target: 10 },
+      { duration: '10s', target: 0 },
+    ],
+  };
+  ```
+</ParamField>
+
+### Thresholds
+
+<ParamField path="thresholds" type="object" default="{}">
+  Pass/fail criteria for metrics.
+
+  ```javascript
+  export const options = {
+    thresholds: {
+      http_req_duration: ['p(95)<500'],
+      http_req_failed: ['rate<0.01'],
+    },
+  };
+  ```
+</ParamField>
+
+### Scenarios
+
+<ParamField path="scenarios" type="object" default="{}">
+  Advanced configuration for VU and iteration scheduling.
+
+  ```javascript
+  export const options = {
+    scenarios: {
+      contacts: {
+        executor: 'constant-vus',
+        vus: 10,
+        duration: '30s',
+      },
+    },
+  };
+  ```
+</ParamField>
+
+## Complete options list
+
+Here's the complete list of k6 options:
+
+### Execution options
+
+- `vus` - Number of virtual users
+- `duration` - Test duration
+- `iterations` - Total iterations
+- `stages` - VU ramping configuration
+- `scenarios` - Advanced scenario configuration
+- `executionSegment` - Segment of test to run
+- `executionSegmentSequence` - Sequence for segmentation
+
+### HTTP options
+
+- `batch` - Max parallel requests in batch
+- `batchPerHost` - Max parallel requests per host
+- `httpDebug` - HTTP request/response logging
+- `insecureSkipTLSVerify` - Skip TLS verification
+- `tlsAuth` - TLS client certificate configuration
+- `tlsCipherSuites` - TLS cipher suites
+- `tlsVersion` - Min/max TLS versions
+
+### Output options
+
+- `noConnectionReuse` - Disable keep-alive
+- `userAgent` - User-Agent header value
+- `discardResponseBodies` - Don't save response bodies
+- `rps` - Max requests per second
+
+### Lifecycle options
+
+- `setupTimeout` - Setup function timeout
+- `teardownTimeout` - Teardown function timeout
+- `maxRedirects` - Max HTTP redirects
+
+### Tags
+
+- `tags` - Tags applied to all metrics
+- `systemTags` - System tags to collect
+
+### Console output
+
+- `noVUConnectionReuse` - Per-VU connection behavior
+- `minIterationDuration` - Minimum iteration duration
+- `maxDuration` - Maximum test duration
+
+## Examples
+
+### Load test with ramping
+
+```javascript
+export const options = {
+  stages: [
+    { duration: '2m', target: 100 },
+    { duration: '5m', target: 100 },
+    { duration: '2m', target: 0 },
+  ],
+  thresholds: {
+    http_req_duration: ['p(99)<1500'],
+  },
+};
+```
+
+### Spike test
+
+```javascript
+export const options = {
+  stages: [
+    { duration: '10s', target: 100 },
+    { duration: '1m', target: 100 },
+    { duration: '10s', target: 1400 },
+    { duration: '3m', target: 1400 },
+    { duration: '10s', target: 100 },
+    { duration: '3m', target: 100 },
+    { duration: '10s', target: 0 },
+  ],
+};
+```
+
+### Using environment variables
+
+```javascript
+export const options = {
+  vus: __ENV.VUS || 10,
+  duration: __ENV.DURATION || '30s',
+};
+```
+
+## Related resources
+
+<CardGroup cols={2}>
+  <Card title="Test lifecycle" icon="arrows-spin" href="/using-k6/test-lifecycle">
+    Learn about the test execution lifecycle
+  </Card>
+  <Card title="Scenarios" icon="diagram-project" href="/using-k6/scenarios">
+    Advanced VU and iteration scheduling
+  </Card>
+  <Card title="Thresholds" icon="chart-line" href="/using-k6/thresholds">
+    Set pass/fail criteria for your tests
+  </Card>
+  <Card title="Environment variables" icon="code" href="/reference/environment-variables">
+    Using environment variables in k6
+  </Card>
+</CardGroup>

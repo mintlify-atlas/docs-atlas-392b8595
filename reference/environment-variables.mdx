@@ -1,0 +1,288 @@
+---
+title: Environment variables
+description: Using environment variables in k6 test scripts and configuration
+icon: terminal
+---
+
+# Environment variables
+
+k6 can access environment variables at runtime. You can use environment variables to:
+
+- Configure test behavior without modifying the script
+- Pass sensitive data like API keys
+- Parameterize tests for different environments
+- Override k6 options
+
+## Accessing environment variables
+
+Access environment variables in your script using the `__ENV` object:
+
+```javascript
+import http from 'k6/http';
+
+const BASE_URL = __ENV.BASE_URL || 'https://test-api.k6.io';
+const API_KEY = __ENV.API_KEY;
+
+export default function () {
+  const headers = {
+    'Authorization': `Bearer ${API_KEY}`,
+  };
+  
+  http.get(`${BASE_URL}/public/crocodiles/`, { headers });
+}
+```
+
+## Setting environment variables
+
+You can set environment variables in multiple ways:
+
+<Tabs>
+  <Tab title="Command line">
+    Pass variables when running k6:
+
+    ```bash
+    BASE_URL=https://api.example.com API_KEY=secret k6 run script.js
+    ```
+  </Tab>
+
+  <Tab title=".env file">
+    Create a `.env` file:
+
+    ```bash
+    # .env
+    BASE_URL=https://api.example.com
+    API_KEY=your-api-key-here
+    ```
+
+    Then load it before running k6:
+
+    ```bash
+    export $(cat .env | xargs) && k6 run script.js
+    ```
+  </Tab>
+
+  <Tab title="System environment">
+    Set system-wide environment variables:
+
+    ```bash
+    export BASE_URL=https://api.example.com
+    export API_KEY=secret
+    k6 run script.js
+    ```
+  </Tab>
+</Tabs>
+
+## k6 options via environment variables
+
+You can set k6 options using environment variables with the `K6_` prefix:
+
+```bash
+K6_VUS=10 K6_DURATION=30s k6 run script.js
+```
+
+Common k6 environment variables:
+
+<ParamField path="K6_VUS" type="integer">
+  Number of virtual users
+</ParamField>
+
+<ParamField path="K6_DURATION" type="string">
+  Test duration (e.g., `30s`, `5m`, `1h`)
+</ParamField>
+
+<ParamField path="K6_ITERATIONS" type="integer">
+  Total number of iterations
+</ParamField>
+
+<ParamField path="K6_OUT" type="string">
+  Output destination (e.g., `json=results.json`, `influxdb=http://localhost:8086`)
+</ParamField>
+
+<ParamField path="K6_INSECURE_SKIP_TLS_VERIFY" type="boolean">
+  Skip TLS certificate verification
+</ParamField>
+
+## Common patterns
+
+### Environment-specific configuration
+
+```javascript
+import http from 'k6/http';
+
+const ENV = __ENV.ENV || 'dev';
+
+const config = {
+  dev: {
+    baseUrl: 'https://dev.example.com',
+    vus: 5,
+  },
+  staging: {
+    baseUrl: 'https://staging.example.com',
+    vus: 20,
+  },
+  prod: {
+    baseUrl: 'https://api.example.com',
+    vus: 100,
+  },
+};
+
+export const options = {
+  vus: config[ENV].vus,
+  duration: '30s',
+};
+
+export default function () {
+  http.get(`${config[ENV].baseUrl}/api/status`);
+}
+```
+
+Run with:
+
+```bash
+ENV=staging k6 run script.js
+```
+
+### Sensitive data
+
+<Warning>
+  Never hardcode sensitive data like API keys, passwords, or tokens in your test scripts.
+</Warning>
+
+```javascript
+import http from 'k6/http';
+import { check } from 'k6';
+
+const API_KEY = __ENV.API_KEY;
+const API_SECRET = __ENV.API_SECRET;
+
+if (!API_KEY || !API_SECRET) {
+  throw new Error('API_KEY and API_SECRET must be set');
+}
+
+export default function () {
+  const res = http.post('https://api.example.com/auth', {
+    key: API_KEY,
+    secret: API_SECRET,
+  });
+  
+  check(res, {
+    'authenticated': (r) => r.status === 200,
+  });
+}
+```
+
+### Feature flags
+
+```javascript
+import http from 'k6/http';
+
+const ENABLE_BROWSER_TESTS = __ENV.ENABLE_BROWSER_TESTS === 'true';
+const ENABLE_WEBSOCKETS = __ENV.ENABLE_WEBSOCKETS === 'true';
+
+export default function () {
+  http.get('https://test.k6.io');
+  
+  if (ENABLE_WEBSOCKETS) {
+    // WebSocket test code
+  }
+  
+  // Additional tests based on flags
+}
+```
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Provide default values">
+    Always provide fallback values for non-critical environment variables:
+
+    ```javascript
+    const BASE_URL = __ENV.BASE_URL || 'https://test-api.k6.io';
+    const TIMEOUT = parseInt(__ENV.TIMEOUT) || 30;
+    ```
+  </Accordion>
+
+  <Accordion title="Validate required variables">
+    Fail early if required variables are missing:
+
+    ```javascript
+    const API_KEY = __ENV.API_KEY;
+    if (!API_KEY) {
+      throw new Error('API_KEY environment variable is required');
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Type conversion">
+    Environment variables are always strings. Convert them as needed:
+
+    ```javascript
+    const VUS = parseInt(__ENV.VUS) || 10;
+    const ENABLE_FEATURE = __ENV.ENABLE_FEATURE === 'true';
+    const RATE = parseFloat(__ENV.RATE) || 0.5;
+    ```
+  </Accordion>
+
+  <Accordion title="Document required variables">
+    Add comments or README documentation listing required environment variables:
+
+    ```javascript
+    /**
+     * Required environment variables:
+     * - API_KEY: Your API authentication key
+     * - BASE_URL: Target API base URL
+     * 
+     * Optional:
+     * - TIMEOUT: Request timeout in seconds (default: 30)
+     */
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## CI/CD integration
+
+Environment variables are particularly useful in CI/CD pipelines:
+
+<CodeGroup>
+```yaml GitHub Actions
+name: Load Test
+on: [push]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: grafana/k6-action@v0.3.1
+        with:
+          filename: script.js
+        env:
+          BASE_URL: ${{ secrets.BASE_URL }}
+          API_KEY: ${{ secrets.API_KEY }}
+          K6_VUS: 50
+          K6_DURATION: 5m
+```
+
+```yaml GitLab CI
+load_test:
+  image: grafana/k6:latest
+  script:
+    - k6 run script.js
+  variables:
+    BASE_URL: $BASE_URL
+    API_KEY: $API_KEY
+    K6_VUS: 50
+    K6_DURATION: 5m
+```
+</CodeGroup>
+
+## Related resources
+
+<CardGroup cols={2}>
+  <Card title="Options reference" icon="sliders" href="/reference/options">
+    Complete list of k6 options
+  </Card>
+  <Card title="Automated testing" icon="robot" href="/testing-guides/automated-testing">
+    Integrating k6 with CI/CD
+  </Card>
+</CardGroup>

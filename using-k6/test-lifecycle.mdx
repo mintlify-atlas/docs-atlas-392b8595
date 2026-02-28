@@ -1,0 +1,353 @@
+---
+title: 'Test Lifecycle'
+description: 'Understanding the four distinct lifecycle stages in a k6 test: init, setup, VU execution, and teardown.'
+---
+
+Every k6 test executes through distinct lifecycle stages in a specific order. Understanding this lifecycle helps you structure your tests correctly and avoid common mistakes.
+
+## The four lifecycle stages
+
+A k6 test always runs through these stages in order:
+
+<Steps>
+  <Step title="Init context">
+    Prepare the script by loading files, importing modules, and defining lifecycle functions. Runs once per VU.
+  </Step>
+  
+  <Step title="Setup (optional)">
+    Set up the test environment and generate data to share across VUs. Runs once at test start.
+  </Step>
+  
+  <Step title="VU execution">
+    Run the main test function repeatedly for the configured duration or iterations. Each VU runs independently.
+  </Step>
+  
+  <Step title="Teardown (optional)">
+    Clean up the test environment and process results. Runs once at test end.
+  </Step>
+</Steps>
+
+## Lifecycle overview
+
+| Stage | Purpose | Example Use Cases | Called |
+|-------|---------|------------------|--------|
+| **Init** | Load files, import modules, declare functions | Import modules, open JSON files, define metrics | Once per VU |
+| **Setup** | Prepare test environment, share data | Call API to initialize test data, authenticate | Once |
+| **VU code** | Execute the test workload | Make HTTP requests, validate responses | Repeatedly per iteration |
+| **Teardown** | Clean up, process results | Validate setup results, send completion webhook | Once |
+
+## Basic structure
+
+Here's the basic structure showing all lifecycle stages:
+
+```javascript
+// 1. Init code
+import http from 'k6/http';
+import { sleep } from 'k6';
+
+export const options = {
+  vus: 10,
+  duration: '30s',
+};
+
+export function setup() {
+  // 2. Setup code
+  const res = http.get('https://quickpizza.grafana.com/api/json');
+  return { data: res.json() };
+}
+
+export default function (data) {
+  // 3. VU code
+  http.get('https://quickpizza.grafana.com/');
+  sleep(1);
+}
+
+export function teardown(data) {
+  // 4. Teardown code
+  console.log(JSON.stringify(data));
+}
+```
+
+## Init context
+
+The init stage is **required** and runs before the test begins. Code in the init context executes once per VU to initialize the test conditions.
+
+**All code outside of lifecycle functions is init code** and executes first.
+
+### What belongs in init
+
+<CodeGroup>
+```javascript Importing modules
+import http from 'k6/http';
+import { Trend } from 'k6/metrics';
+import { check } from 'k6';
+```
+
+```javascript Defining options
+export const options = {
+  vus: 10,
+  duration: '30s',
+  thresholds: {
+    http_req_duration: ['p(95)<200'],
+  },
+};
+```
+
+```javascript Creating custom metrics
+import { Trend } from 'k6/metrics';
+
+const customTrend = new Trend('custom_metric');
+```
+
+```javascript Loading local files
+const testData = JSON.parse(open('./data.json'));
+```
+</CodeGroup>
+
+### Init context restrictions
+
+<Warning>
+  **Init code cannot make HTTP requests.** This ensures the init stage is reproducible across test runs, since HTTP responses are dynamic and unpredictable.
+</Warning>
+
+Init code separates setup from execution, which improves k6 performance and makes test results more reliable.
+
+## VU execution stage
+
+The VU stage is **required** and contains the actual test workload. Scripts must define at least one scenario function (typically `default`) that runs repeatedly.
+
+### The default function
+
+The most common pattern uses the `default` function:
+
+```javascript
+export default function () {
+  // This code runs repeatedly
+  const res = http.get('https://test.k6.io/');
+  check(res, { 'status is 200': (r) => r.status === 200 });
+  sleep(1);
+}
+```
+
+**VU code runs continuously** throughout the test duration. Each VU executes the function from start to end, then immediately loops back to the start.
+
+### VU execution lifecycle
+
+<Steps>
+  <Step title="Execute function">
+    The VU runs the function from start to finish
+  </Step>
+  
+  <Step title="Reset VU state">
+    k6 clears cookies and may close TCP connections (depending on options)
+  </Step>
+  
+  <Step title="Loop back">
+    The VU immediately starts executing the function again
+  </Step>
+</Steps>
+
+This continues until the test duration expires or iteration limit is reached.
+
+### What VU code can and cannot do
+
+<CardGroup cols={2}>
+  <Card title="VU code CAN" icon="check">
+    - Make HTTP requests
+    - Emit metrics
+    - Run checks
+    - Use imported modules
+  </Card>
+  
+  <Card title="VU code CANNOT" icon="xmark">
+    - Load files from filesystem
+    - Import new modules
+    - Define new metrics
+  </Card>
+</CardGroup>
+
+## Setup and teardown
+
+The `setup` and `teardown` functions are **optional** lifecycle functions that run once per test.
+
+### Setup function
+
+Setup runs **once at the beginning** of the test, after init but before VU execution:
+
+```javascript
+import http from 'k6/http';
+
+export function setup() {
+  // Runs once to prepare the test
+  const res = http.get('https://quickpizza.grafana.com/api/json');
+  return { data: res.json() };
+}
+
+export default function (data) {
+  // Can access data returned from setup
+  console.log(JSON.stringify(data));
+}
+```
+
+<Note>
+  Unlike init code, setup functions **can make HTTP requests** since they run during test execution.
+</Note>
+
+### Teardown function
+
+Teardown runs **once at the end** of the test, after all VU execution completes:
+
+```javascript
+export function teardown(data) {
+  // Runs once to clean up
+  console.log('Test completed with data:', JSON.stringify(data));
+  
+  // Could send a webhook notification
+  // http.post('https://example.com/webhook', JSON.stringify(data));
+}
+```
+
+<Warning>
+  If the `setup()` function throws an error, `teardown()` will not run. Add error handling to setup to ensure proper cleanup.
+</Warning>
+
+## Sharing data between stages
+
+The `setup()` function can return data that gets passed to both `default()` and `teardown()`:
+
+```javascript
+export function setup() {
+  return { 
+    username: 'testuser',
+    timestamp: new Date().toISOString()
+  };
+}
+
+export default function (data) {
+  // Each VU gets a copy of the data
+  console.log(`User: ${data.username}`);
+}
+
+export function teardown(data) {
+  // Teardown also receives the data
+  console.log(`Test started at ${data.timestamp}`);
+}
+```
+
+### Data sharing rules
+
+<Warning>
+  - You can only pass **data (JSON)** between stages, not functions
+  - Each VU receives an **independent copy** of the data
+  - VUs **cannot modify** the shared data
+  - Large data increases memory consumption
+</Warning>
+
+![Diagram showing setup returning data to both default and teardown functions](/media/docs/k6-oss/lifecycle.png)
+
+## Skipping setup and teardown
+
+You can skip these stages using CLI flags:
+
+```bash
+k6 run --no-setup --no-teardown script.js
+```
+
+This is useful when iterating on VU code without repeatedly running setup/teardown logic.
+
+## Scenario functions
+
+Instead of the `default` function, you can define custom scenario functions:
+
+```javascript
+import http from 'k6/http';
+import { sleep } from 'k6';
+
+export const options = {
+  scenarios: {
+    my_web_test: {
+      exec: 'webtest',  // Name of function to execute
+      executor: 'constant-vus',
+      vus: 50,
+      duration: '1m',
+    },
+  },
+};
+
+// Custom scenario function
+export function webtest() {
+  http.get('https://test.k6.io/contacts.php');
+  sleep(Math.random() * 2);
+}
+```
+
+This allows different scenarios to execute different functions with different workload patterns.
+
+## Complete example
+
+Here's a complete test using all lifecycle stages:
+
+```javascript
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+import { Trend } from 'k6/metrics';
+
+// 1. Init context
+const customMetric = new Trend('custom_waiting_time');
+
+export const options = {
+  vus: 10,
+  duration: '30s',
+  thresholds: {
+    http_req_failed: ['rate<0.01'],
+  },
+};
+
+// 2. Setup
+export function setup() {
+  console.log('Starting test...');
+  const res = http.get('https://quickpizza.grafana.com/api/json');
+  return { 
+    apiVersion: res.json('version') || 'unknown',
+    startTime: new Date().toISOString(),
+  };
+}
+
+// 3. VU code
+export default function (data) {
+  const res = http.get('https://quickpizza.grafana.com/');
+  
+  check(res, {
+    'is status 200': (r) => r.status === 200,
+  });
+  
+  customMetric.add(res.timings.waiting);
+  sleep(1);
+}
+
+// 4. Teardown
+export function teardown(data) {
+  console.log(`Test completed. API version: ${data.apiVersion}`);
+  console.log(`Started at: ${data.startTime}`);
+}
+```
+
+## Best practices
+
+<CardGroup cols={2}>
+  <Card title="Minimize init code" icon="code">
+    Keep init code lightweight. Heavy computation in init slows test startup.
+  </Card>
+  
+  <Card title="Use setup for dynamic data" icon="database">
+    Generate test data in setup() and share it across VUs.
+  </Card>
+  
+  <Card title="Keep VU code focused" icon="bullseye">
+    VU code should only contain the workload you want to measure.
+  </Card>
+  
+  <Card title="Handle setup errors" icon="shield">
+    Add error handling to setup() to ensure teardown() runs.
+  </Card>
+</CardGroup>

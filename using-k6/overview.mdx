@@ -1,0 +1,148 @@
+---
+title: 'Using k6'
+description: 'Learn the core concepts and workflow for load testing with k6, from writing tests to analyzing results.'
+---
+
+k6 is a modern load testing tool built for developers. It provides a clean, approachable API for creating performance tests using JavaScript.
+
+This guide covers the essential concepts and features you'll use when building and running k6 load tests.
+
+## Core workflow
+
+A typical k6 testing workflow follows these steps:
+
+<Steps>
+  <Step title="Write your test script">
+    Create a JavaScript file that defines your test logic, including HTTP requests, checks, and custom metrics.
+  </Step>
+  
+  <Step title="Configure test options">
+    Set options like virtual users (VUs), duration, thresholds, and scenarios to control how your test executes.
+  </Step>
+  
+  <Step title="Run your test">
+    Execute your test using the k6 CLI and monitor real-time metrics as the test runs.
+  </Step>
+  
+  <Step title="Analyze results">
+    Review the end-of-test summary and detailed metrics to identify performance issues.
+  </Step>
+</Steps>
+
+## Key concepts
+
+### Virtual Users (VUs)
+
+Virtual users simulate concurrent users accessing your system. Each VU runs your test script independently and repeatedly during the test duration.
+
+### Iterations
+
+An iteration is one complete execution of your test function (typically the `default` function). VUs run iterations continuously throughout the test.
+
+### Test lifecycle
+
+Every k6 test follows a specific lifecycle with distinct stages:
+
+1. **Init** - Load files, import modules, define test configuration
+2. **Setup** (optional) - Prepare test environment and generate data
+3. **VU execution** - Run the main test function repeatedly
+4. **Teardown** (optional) - Clean up and process results
+
+Learn more in [Test Lifecycle](/using-k6/test-lifecycle).
+
+### Checks
+
+Checks validate that your system responds correctly. Unlike assertions in other frameworks, failed checks don't stop the test—they just record the failure rate.
+
+```javascript
+import { check } from 'k6';
+import http from 'k6/http';
+
+export default function () {
+  const res = http.get('https://test.k6.io/');
+  check(res, {
+    'is status 200': (r) => r.status === 200,
+    'response time < 200ms': (r) => r.timings.duration < 200,
+  });
+}
+```
+
+### Thresholds
+
+Thresholds define pass/fail criteria for your test. If any threshold fails, the entire test fails with a non-zero exit code.
+
+```javascript
+export const options = {
+  thresholds: {
+    http_req_failed: ['rate<0.01'], // Less than 1% errors
+    http_req_duration: ['p(95)<200'], // 95% under 200ms
+  },
+};
+```
+
+### Metrics
+
+k6 automatically collects built-in metrics for HTTP requests, response times, data transfer, and more. You can also create custom metrics to measure application-specific performance.
+
+The most important metrics to monitor are:
+
+- `http_reqs` - Total number of requests
+- `http_req_failed` - Rate of failed requests (error rate)
+- `http_req_duration` - Request duration (latency)
+
+## Example test script
+
+Here's a complete k6 test that demonstrates core concepts:
+
+```javascript
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+
+// Test configuration
+export const options = {
+  vus: 10,
+  duration: '30s',
+  thresholds: {
+    http_req_failed: ['rate<0.01'],
+    http_req_duration: ['p(95)<500'],
+  },
+};
+
+// VU code - runs repeatedly for each VU
+export default function () {
+  const res = http.get('https://test.k6.io/');
+  
+  check(res, {
+    'is status 200': (r) => r.status === 200,
+  });
+  
+  sleep(1);
+}
+```
+
+This test:
+- Runs 10 virtual users for 30 seconds
+- Makes HTTP GET requests to test.k6.io
+- Validates that responses have status 200
+- Fails if error rate exceeds 1% or 95th percentile exceeds 500ms
+- Pauses 1 second between iterations
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Test Lifecycle" icon="rotate" href="/using-k6/test-lifecycle">
+    Understand the four stages of k6 test execution
+  </Card>
+  
+  <Card title="HTTP Requests" icon="globe" href="/using-k6/http-requests">
+    Learn how to make and configure HTTP requests
+  </Card>
+  
+  <Card title="Checks" icon="check" href="/using-k6/checks">
+    Validate responses with checks
+  </Card>
+  
+  <Card title="Thresholds" icon="flag" href="/using-k6/thresholds">
+    Define pass/fail criteria for your tests
+  </Card>
+</CardGroup>

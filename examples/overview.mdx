@@ -1,0 +1,125 @@
+---
+title: 'Examples'
+description: 'Practical k6 examples for common testing scenarios including HTTP authentication, API testing, WebSockets, file uploads, and dynamic data handling'
+icon: 'code'
+---
+
+Explore practical k6 examples for common load testing scenarios. Each example includes complete, working test scripts you can run immediately.
+
+## Getting Started
+
+All examples use real endpoints from the k6 demo applications. You can copy and run them directly:
+
+```sh
+k6 run script.js
+```
+
+## Available Examples
+
+<CardGroup cols={2}>
+  <Card title="HTTP Authentication" icon="shield-check" href="/examples/http-authentication">
+    Test APIs with Basic Auth, Bearer tokens, NTLM, and AWS Signature v4
+  </Card>
+  
+  <Card title="API CRUD Operations" icon="database" href="/examples/api-crud-operations">
+    Complete REST API testing with Create, Read, Update, and Delete operations
+  </Card>
+  
+  <Card title="WebSockets" icon="bolt" href="/examples/websockets">
+    Real-time WebSocket connection testing with bidirectional messaging
+  </Card>
+  
+  <Card title="Data Uploads" icon="upload" href="/examples/data-uploads">
+    File upload testing with multipart requests and binary data
+  </Card>
+  
+  <Card title="Correlation & Dynamic Data" icon="link" href="/examples/correlation-and-dynamic-data">
+    Extract and reuse dynamic tokens, CSRF tokens, and session data
+  </Card>
+</CardGroup>
+
+## Common Patterns
+
+### Basic Test Structure
+
+Most k6 tests follow this pattern:
+
+```javascript
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+
+export const options = {
+  vus: 10,
+  duration: '30s',
+};
+
+export default function () {
+  const res = http.get('https://test.k6.io');
+  check(res, { 'status is 200': (r) => r.status === 200 });
+  sleep(1);
+}
+```
+
+### Using Environment Variables
+
+Make tests configurable with environment variables:
+
+```javascript
+const BASE_URL = __ENV.BASE_URL || 'https://test.k6.io';
+const API_TOKEN = __ENV.API_TOKEN;
+```
+
+Run with:
+
+```sh
+k6 run -e BASE_URL=https://api.example.com -e API_TOKEN=secret script.js
+```
+
+## Test Lifecycle
+
+k6 tests have four distinct phases:
+
+1. **Init context** - Load files, import modules, define global variables
+2. **Setup stage** - Run once to prepare test data (optional)
+3. **VU stage** - Main test logic, runs repeatedly for each VU
+4. **Teardown stage** - Clean up after test completes (optional)
+
+```javascript
+// 1. Init context
+import http from 'k6/http';
+
+const data = JSON.parse(open('./data.json'));
+
+// 2. Setup stage
+export function setup() {
+  const res = http.post('https://api.example.com/auth', {
+    username: 'user',
+    password: 'pass',
+  });
+  return { token: res.json('token') };
+}
+
+// 3. VU stage
+export default function (data) {
+  const res = http.get('https://api.example.com/data', {
+    headers: { Authorization: `Bearer ${data.token}` },
+  });
+}
+
+// 4. Teardown stage
+export function teardown(data) {
+  console.log('Test complete');
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Test Types" icon="vial" href="/guides/test-types">
+    Learn about smoke, load, stress, and spike testing
+  </Card>
+  
+  <Card title="Metrics & Checks" icon="chart-line" href="/guides/metrics-and-checks">
+    Validate responses and track performance metrics
+  </Card>
+</CardGroup>

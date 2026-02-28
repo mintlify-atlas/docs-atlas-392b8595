@@ -1,0 +1,414 @@
+---
+title: k6 Browser Extension
+description: Browser automation and end-to-end testing with Playwright-compatible APIs for frontend performance testing
+icon: browser
+---
+
+The k6 browser module brings browser automation and end-to-end web testing to k6 while supporting core k6 features. It adds browser-level APIs to interact with browsers and collect frontend performance metrics.
+
+## Overview
+
+The browser module is **built into k6** (not a separate extension) and provides:
+
+- Browser automation with Playwright-compatible APIs
+- Frontend performance metrics (Web Vitals)
+- Real browser interaction testing
+- Integration with protocol-level load testing
+
+<Note>
+To use the browser module, you need:
+- Latest [k6 version](https://github.com/grafana/k6/releases)
+- A Chromium-based browser (such as [Google Chrome](https://www.google.com/chrome/)) installed on your machine
+</Note>
+
+## Watch: Introduction to k6 browser
+
+<iframe
+  width="100%"
+  height="400"
+  src="https://www.youtube.com/embed/N7VJ9X5yAKo"
+  title="k6 browser introduction"
+  frameBorder="0"
+  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+  allowFullScreen
+></iframe>
+
+## Use cases
+
+The browser module helps you:
+
+<CardGroup cols={2}>
+  <Card title="Frontend performance" icon="gauge-high">
+    Measure user experience with Web Vitals and page load metrics
+  </Card>
+  
+  <Card title="Combined testing" icon="link">
+    Test frontend under protocol-level load to find real-world bottlenecks
+  </Card>
+  
+  <Card title="Element validation" icon="check">
+    Verify all UI elements are interactive and loading correctly
+  </Card>
+  
+  <Card title="User flows" icon="route">
+    Test complete user journeys across multiple pages
+  </Card>
+</CardGroup>
+
+Browser-level testing helps answer questions like:
+
+- When my application receives thousands of simultaneous requests, what happens to the frontend?
+- How can I get metrics specific to browsers, like total page load time?
+- Are all my elements interactive on the frontend?
+- Are there loading spinners that take too long to disappear?
+
+## Quick start
+
+<Steps>
+  <Step title="Install k6">
+    Download and install the [latest k6 version](https://grafana.com/docs/k6/latest/set-up/install-k6/).
+  </Step>
+  
+  <Step title="Install a Chromium browser">
+    Install Google Chrome, Microsoft Edge, or another Chromium-based browser.
+  </Step>
+  
+  <Step title="Create a browser test">
+    Generate a browser test template:
+    
+    ```bash
+    k6 new --template browser browser-script.js
+    ```
+  </Step>
+  
+  <Step title="Run the test">
+    Execute your browser test:
+    
+    ```bash
+    k6 run browser-script.js
+    ```
+  </Step>
+</Steps>
+
+## Example browser test
+
+Here's a simple browser test that navigates to a page and checks elements:
+
+```javascript
+import { browser } from 'k6/browser';
+import { check } from 'k6';
+
+export const options = {
+  scenarios: {
+    ui: {
+      executor: 'shared-iterations',
+      options: {
+        browser: {
+          type: 'chromium',
+        },
+      },
+    },
+  },
+};
+
+export default async function () {
+  const page = await browser.newPage();
+
+  try {
+    await page.goto('https://test.k6.io/');
+
+    // Check page title
+    const header = await page.locator('h1').textContent();
+    check(header, {
+      'header exists': (h) => h === 'Welcome to test.k6.io',
+    });
+
+    // Click on a link
+    await page.locator('a[href="/my_messages.php"]').click();
+
+    // Wait for navigation and check new page
+    await page.waitForSelector('h2');
+    const pageTitle = await page.locator('h2').textContent();
+    check(pageTitle, {
+      'navigated successfully': (t) => t === 'Messages',
+    });
+  } finally {
+    await page.close();
+  }
+}
+```
+
+## Browser metrics
+
+The browser module automatically collects metrics:
+
+### Browser-specific metrics
+
+| Metric | Description |
+|--------|-------------|
+| `browser_data_received` | Data received by the browser |
+| `browser_data_sent` | Data sent by the browser |
+| `browser_http_req_duration` | Time for browser HTTP requests |
+| `browser_http_req_failed` | Rate of failed browser HTTP requests |
+
+### Web Vitals
+
+| Metric | Description |
+|--------|-------------|
+| `browser_web_vital_cls` | Cumulative Layout Shift |
+| `browser_web_vital_fcp` | First Contentful Paint |
+| `browser_web_vital_fid` | First Input Delay |
+| `browser_web_vital_inp` | Interaction to Next Paint |
+| `browser_web_vital_lcp` | Largest Contentful Paint |
+| `browser_web_vital_ttfb` | Time to First Byte |
+
+**Example output:**
+
+```text
+BROWSER
+browser_data_received.........: 357 kB 54 kB/s
+browser_data_sent.............: 4.9 kB 738 B/s
+browser_http_req_duration.....: avg=355.28ms min=124.04ms med=314.4ms max=1.45s
+browser_http_req_failed.......: 0.00%  0 out of 18
+
+WEB_VITALS
+browser_web_vital_cls.........: avg=0        min=0        med=0       max=0
+browser_web_vital_fcp.........: avg=2.33s    min=2.33s    med=2.33s   max=2.33s
+browser_web_vital_fid.........: avg=300µs    min=300µs    med=300µs   max=300µs
+browser_web_vital_inp.........: avg=56ms     min=56ms     med=56ms    max=56ms
+browser_web_vital_lcp.........: avg=2.33s    min=2.33s    med=2.33s   max=2.33s
+browser_web_vital_ttfb........: avg=1.45s    min=1.45s    med=1.45s   max=1.45s
+```
+
+## Playwright-compatible APIs
+
+The browser module uses Playwright-inspired APIs:
+
+```javascript
+import { browser } from 'k6/browser';
+
+export default async function () {
+  const page = await browser.newPage();
+
+  // Navigation
+  await page.goto('https://example.com');
+
+  // Locators
+  const button = page.locator('button#submit');
+  await button.click();
+
+  // Form interactions
+  await page.locator('input[name="email"]').fill('user@example.com');
+  await page.locator('input[name="password"]').fill('password123');
+
+  // Screenshots
+  await page.screenshot({ path: 'screenshot.png' });
+
+  // Wait for elements
+  await page.waitForSelector('.results');
+
+  // Extract data
+  const text = await page.locator('h1').textContent();
+  console.log('Header:', text);
+
+  await page.close();
+}
+```
+
+## Combining browser and protocol tests
+
+Test frontend performance under realistic protocol-level load:
+
+```javascript
+import http from 'k6/http';
+import { browser } from 'k6/browser';
+import { check } from 'k6';
+
+export const options = {
+  scenarios: {
+    // Protocol-level load
+    api_load: {
+      executor: 'constant-vus',
+      vus: 50,
+      duration: '5m',
+      exec: 'apiTest',
+    },
+    // Browser test during load
+    browser_test: {
+      executor: 'constant-vus',
+      vus: 2,
+      duration: '5m',
+      exec: 'browserTest',
+      options: {
+        browser: {
+          type: 'chromium',
+        },
+      },
+    },
+  },
+};
+
+// Protocol-level load test
+export function apiTest() {
+  const res = http.get('https://test.k6.io/api/data');
+  check(res, { 'status is 200': (r) => r.status === 200 });
+}
+
+// Browser test
+export async function browserTest() {
+  const page = await browser.newPage();
+  
+  try {
+    await page.goto('https://test.k6.io/');
+    await page.waitForSelector('h1');
+    
+    const header = await page.locator('h1').textContent();
+    check(header, { 'header loaded': (h) => h !== '' });
+  } finally {
+    await page.close();
+  }
+}
+```
+
+## Browser options
+
+Configure browser behavior:
+
+```javascript
+export const options = {
+  scenarios: {
+    ui: {
+      executor: 'shared-iterations',
+      options: {
+        browser: {
+          type: 'chromium',
+          headless: true,              // Run in headless mode (default)
+          timeout: '60s',              // Default timeout for actions
+          slowMo: '500ms',             // Slow down operations (for debugging)
+          args: ['--no-sandbox'],      // Additional browser arguments
+        },
+      },
+    },
+  },
+};
+```
+
+## Debugging browser tests
+
+### Run in headed mode
+
+See the browser window during test execution:
+
+```javascript
+export const options = {
+  scenarios: {
+    ui: {
+      options: {
+        browser: {
+          type: 'chromium',
+          headless: false,  // Show browser window
+        },
+      },
+    },
+  },
+};
+```
+
+### Take screenshots
+
+Capture page state:
+
+```javascript
+await page.screenshot({ path: 'debug.png' });
+```
+
+### Slow down execution
+
+```javascript
+export const options = {
+  scenarios: {
+    ui: {
+      options: {
+        browser: {
+          type: 'chromium',
+          slowMo: '1s',  // Wait 1 second between actions
+        },
+      },
+    },
+  },
+};
+```
+
+## Migrating from Playwright
+
+If you have existing Playwright tests, migration is straightforward:
+
+**Playwright:**
+```javascript
+const { chromium } = require('playwright');
+
+(async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  await page.goto('https://example.com');
+  await browser.close();
+})();
+```
+
+**k6 browser:**
+```javascript
+import { browser } from 'k6/browser';
+
+export default async function () {
+  const page = await browser.newPage();
+  await page.goto('https://example.com');
+  await page.close();
+}
+```
+
+Key differences:
+
+- No need to launch/close browser (k6 manages this)
+- Use k6's `export default function` instead of IIFE
+- Use `import` instead of `require`
+- k6 automatically handles concurrent browser instances
+
+## Best practices
+
+<CardGroup cols={2}>
+  <Card title="Use headless mode" icon="eye-slash">
+    Run tests in headless mode for better performance in CI/CD
+  </Card>
+  
+  <Card title="Set appropriate timeouts" icon="clock">
+    Configure timeouts based on your application's performance
+  </Card>
+  
+  <Card title="Clean up resources" icon="broom">
+    Always close pages in a `finally` block to prevent resource leaks
+  </Card>
+  
+  <Card title="Limit browser VUs" icon="users">
+    Browser tests are resource-intensive; use fewer VUs than protocol tests
+  </Card>
+</CardGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Explore Extensions" icon="compass" href="/extensions/explore">
+    Discover other k6 extensions
+  </Card>
+  
+  <Card title="xk6-disruptor" icon="bolt" href="/extensions/xk6-disruptor">
+    Add chaos testing to your suite
+  </Card>
+  
+  <Card title="Protocol Extensions" icon="network-wired" href="/extensions/protocol-extensions">
+    Test MQTT, Redis, and SQL
+  </Card>
+  
+  <Card title="Full Browser API" icon="book" href="https://grafana.com/docs/k6/latest/javascript-api/k6-browser/">
+    Complete browser module reference
+  </Card>
+</CardGroup>

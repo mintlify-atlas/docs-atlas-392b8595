@@ -1,0 +1,417 @@
+---
+title: 'Scenarios'
+description: 'Configure advanced workload patterns using k6 scenarios with different executors for realistic traffic modeling.'
+---
+
+Scenarios provide fine-grained control over how k6 executes your test workload. They let you model diverse traffic patterns and complex user behaviors in a single test.
+
+## What are scenarios?
+
+Scenarios configure how VUs (virtual users) and iterations are scheduled during test execution. Each scenario can:
+
+- Execute a different JavaScript function
+- Use a different executor to control workload patterns
+- Run in parallel or sequence with other scenarios
+- Have independent environment variables and tags
+
+## Why use scenarios?
+
+Scenarios provide several benefits over simple VU/duration configuration:
+
+<CardGroup cols={2}>
+  <Card title="Realistic traffic patterns" icon="chart-line">
+    Model different user behaviors with arrival rates, iterations, or ramping patterns.
+  </Card>
+  
+  <Card title="Multiple workloads" icon="layer-group">
+    Run different test functions in parallel or sequence within one test.
+  </Card>
+  
+  <Card title="Better organization" icon="sitemap">
+    Separate different test phases or user types into distinct scenarios.
+  </Card>
+  
+  <Card title="Granular analysis" icon="magnifying-glass-chart">
+    Tag and analyze each scenario independently with scenario-specific metrics.
+  </Card>
+</CardGroup>
+
+## Basic scenario configuration
+
+Define scenarios in the `options.scenarios` object:
+
+```javascript
+import http from 'k6/http';
+
+export const options = {
+  scenarios: {
+    my_scenario: {
+      executor: 'constant-vus',
+      vus: 10,
+      duration: '30s',
+    },
+  },
+};
+
+export default function () {
+  http.get('https://test.k6.io/');
+}
+```
+
+Each scenario requires:
+- A unique name (`my_scenario`)
+- An `executor` property specifying the workload pattern
+- Executor-specific configuration (like `vus` and `duration`)
+
+## Scenario executors
+
+Executors determine how k6 schedules VUs and iterations. Choose the executor that best matches your workload:
+
+### By iterations
+
+<Tabs>
+  <Tab title="shared-iterations">
+    A fixed number of iterations shared between VUs.
+    
+    ```javascript
+    export const options = {
+      scenarios: {
+        shared_iters: {
+          executor: 'shared-iterations',
+          vus: 10,
+          iterations: 100,  // Total across all VUs
+        },
+      },
+    };
+    ```
+    
+    **Use when:** You need exactly 100 iterations, distributed among VUs.
+  </Tab>
+  
+  <Tab title="per-vu-iterations">
+    Each VU runs a fixed number of iterations.
+    
+    ```javascript
+    export const options = {
+      scenarios: {
+        per_vu_iters: {
+          executor: 'per-vu-iterations',
+          vus: 10,
+          iterations: 10,  // Per VU
+        },
+      },
+    };
+    ```
+    
+    **Use when:** Each VU should run exactly 10 iterations (100 total).
+  </Tab>
+</Tabs>
+
+### By VUs
+
+<Tabs>
+  <Tab title="constant-vus">
+    A constant number of VUs for a duration.
+    
+    ```javascript
+    export const options = {
+      scenarios: {
+        constant_load: {
+          executor: 'constant-vus',
+          vus: 50,
+          duration: '1m',
+        },
+      },
+    };
+    ```
+    
+    **Use when:** You want steady load with 50 VUs for 1 minute.
+  </Tab>
+  
+  <Tab title="ramping-vus">
+    VUs ramp up and down over stages.
+    
+    ```javascript
+    export const options = {
+      scenarios: {
+        ramping_load: {
+          executor: 'ramping-vus',
+          startVUs: 0,
+          stages: [
+            { duration: '1m', target: 50 },   // Ramp up
+            { duration: '3m', target: 50 },   // Stay
+            { duration: '1m', target: 0 },    // Ramp down
+          ],
+        },
+      },
+    };
+    ```
+    
+    **Use when:** You need gradual load increases and decreases.
+  </Tab>
+</Tabs>
+
+### By arrival rate
+
+<Tabs>
+  <Tab title="constant-arrival-rate">
+    Fixed iteration rate (open model).
+    
+    ```javascript
+    export const options = {
+      scenarios: {
+        constant_rate: {
+          executor: 'constant-arrival-rate',
+          rate: 100,           // 100 iterations per timeUnit
+          timeUnit: '1s',      // Per second
+          duration: '1m',
+          preAllocatedVUs: 50, // Initial VUs
+          maxVUs: 100,         // Maximum VUs
+        },
+      },
+    };
+    ```
+    
+    **Use when:** You need exactly 100 requests per second, regardless of response time.
+  </Tab>
+  
+  <Tab title="ramping-arrival-rate">
+    Variable iteration rate over stages.
+    
+    ```javascript
+    export const options = {
+      scenarios: {
+        ramping_rate: {
+          executor: 'ramping-arrival-rate',
+          startRate: 0,
+          timeUnit: '1s',
+          preAllocatedVUs: 50,
+          maxVUs: 200,
+          stages: [
+            { duration: '1m', target: 50 },   // Ramp to 50/s
+            { duration: '3m', target: 50 },   // Stay at 50/s
+            { duration: '1m', target: 0 },    // Ramp down
+          ],
+        },
+      },
+    };
+    ```
+    
+    **Use when:** You need gradual changes in request rate.
+  </Tab>
+</Tabs>
+
+## Scenario options
+
+All scenarios support these common options:
+
+| Option | Type | Description | Default |
+|--------|------|-------------|---------|
+| `executor` | string | Executor type (required) | - |
+| `startTime` | string | Delay before starting | `"0s"` |
+| `gracefulStop` | string | Time to wait for iterations to finish | `"30s"` |
+| `exec` | string | Function name to execute | `"default"` |
+| `env` | object | Scenario-specific environment variables | `{}` |
+| `tags` | object | Scenario-specific tags | `{}` |
+
+## Multiple scenarios
+
+Run multiple scenarios in parallel:
+
+```javascript
+import http from 'k6/http';
+
+export const options = {
+  scenarios: {
+    load_test: {
+      executor: 'constant-vus',
+      vus: 50,
+      duration: '5m',
+      exec: 'loadTest',
+    },
+    stress_test: {
+      executor: 'ramping-vus',
+      startTime: '5m',  // Start after load_test
+      startVUs: 0,
+      stages: [
+        { duration: '2m', target: 100 },
+        { duration: '5m', target: 100 },
+        { duration: '2m', target: 0 },
+      ],
+      exec: 'stressTest',
+    },
+  },
+};
+
+export function loadTest() {
+  http.get('https://test.k6.io/');
+}
+
+export function stressTest() {
+  http.get('https://test.k6.io/');
+  http.post('https://test.k6.io/login', { username: 'test' });
+}
+```
+
+This runs a load test for 5 minutes, then immediately starts a stress test.
+
+## Scenario-specific tags and environment
+
+Tag metrics by scenario:
+
+```javascript
+import http from 'k6/http';
+
+export const options = {
+  scenarios: {
+    api_test: {
+      executor: 'constant-vus',
+      vus: 10,
+      duration: '1m',
+      tags: { 
+        test_type: 'api',
+        priority: 'high',
+      },
+      env: {
+        BASE_URL: 'https://api.example.com',
+      },
+    },
+    web_test: {
+      executor: 'constant-vus',
+      vus: 20,
+      duration: '1m',
+      tags: { 
+        test_type: 'web',
+        priority: 'medium',
+      },
+      env: {
+        BASE_URL: 'https://www.example.com',
+      },
+    },
+  },
+  thresholds: {
+    'http_req_duration{test_type:api}': ['p(95)<500'],
+    'http_req_duration{test_type:web}': ['p(95)<1000'],
+  },
+};
+
+export default function () {
+  http.get(__ENV.BASE_URL);
+}
+```
+
+## Complete example
+
+Here's a realistic scenario combining multiple patterns:
+
+```javascript
+import http from 'k6/http';
+import { sleep, check } from 'k6';
+
+export const options = {
+  scenarios: {
+    // Warm-up phase
+    warmup: {
+      executor: 'constant-vus',
+      vus: 5,
+      duration: '30s',
+      tags: { phase: 'warmup' },
+    },
+    
+    // Main load test
+    load: {
+      executor: 'ramping-vus',
+      startTime: '30s',
+      startVUs: 0,
+      stages: [
+        { duration: '1m', target: 50 },
+        { duration: '5m', target: 50 },
+        { duration: '1m', target: 0 },
+      ],
+      tags: { phase: 'load' },
+    },
+    
+    // Spike test
+    spike: {
+      executor: 'constant-arrival-rate',
+      startTime: '7m30s',
+      rate: 100,
+      timeUnit: '1s',
+      duration: '30s',
+      preAllocatedVUs: 100,
+      maxVUs: 200,
+      tags: { phase: 'spike' },
+    },
+  },
+  
+  thresholds: {
+    'http_req_duration{phase:load}': ['p(95)<500'],
+    'http_req_duration{phase:spike}': ['p(95)<1000'],
+    'http_req_failed': ['rate<0.01'],
+  },
+};
+
+const baseUrl = 'https://quickpizza.grafana.com';
+
+export default function () {
+  const res = http.get(baseUrl);
+  
+  check(res, {
+    'status is 200': (r) => r.status === 200,
+  });
+  
+  sleep(1);
+}
+```
+
+## Scenario execution output
+
+When running scenarios, k6 displays scenario information:
+
+```bash
+  scenarios: (100.00%) 2 scenarios, 20 max VUs, 10m40s max duration:
+           * shared_iter_scenario: 100 iterations shared among 10 VUs
+           * per_vu_scenario: 10 iterations for each of 10 VUs (startTime: 10s)
+```
+
+Results are shown both overall and per-scenario:
+
+```bash
+  █ TOTAL RESULTS
+    http_req_duration..........: avg=115.25ms
+    http_reqs..................: 200
+
+  █ SCENARIO: shared_iter_scenario
+    http_req_duration..........: avg=115.65ms
+    http_reqs..................: 100
+
+  █ SCENARIO: per_vu_scenario
+    http_req_duration..........: avg=114.86ms
+    http_reqs..................: 100
+```
+
+## Best practices
+
+<CardGroup cols={2}>
+  <Card title="Choose the right executor" icon="gears">
+    Use VU-based executors for closed models, arrival-rate executors for open models.
+  </Card>
+  
+  <Card title="Use meaningful names" icon="tag">
+    Name scenarios descriptively: "warmup", "load_test", "spike" not "scenario1".
+  </Card>
+  
+  <Card title="Tag for analysis" icon="tags">
+    Add scenario-specific tags to enable granular threshold and analysis.
+  </Card>
+  
+  <Card title="Sequence with startTime" icon="clock">
+    Use startTime to create sequential test phases within one test run.
+  </Card>
+</CardGroup>
+
+## Next steps
+
+<Card title="Executors Reference" icon="book" href="/reference/executors">
+  Detailed documentation for each executor type with advanced options
+</Card>

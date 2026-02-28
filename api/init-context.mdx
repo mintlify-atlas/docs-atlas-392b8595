@@ -1,0 +1,412 @@
+---
+title: 'Init Context'
+description: 'Global context for initialization code and environment access'
+icon: 'rocket'
+---
+
+The **init context** (also called "init code") is code in the global context that runs before the test starts. It has access to special functions and variables not available during main script execution.
+
+## Overview
+
+Before k6 starts the test logic, code in the init context prepares the script by:
+- Importing modules
+- Loading files
+- Defining global variables
+- Setting up configuration
+- Initializing shared resources
+
+Only a few special functions are available exclusively in the init context.
+
+<Note>
+For details about the runtime and execution phases, refer to the [Test Lifecycle](https://grafana.com/docs/k6/latest/using-k6/test-lifecycle) documentation.
+</Note>
+
+## Init Context Functions
+
+### open()
+
+<ResponseField name="open(filePath, [mode])" type="function">
+  Opens a file and reads all its contents into memory for use in the script.
+  
+  **Parameters:**
+  <ParamField path="filePath" type="string" required>
+    Path to the file (absolute or relative). The file is loaded once even when running with multiple VUs.
+  </ParamField>
+  
+  <ParamField path="mode" type="string">
+    File read mode:
+    - Omit or `"t"` - Read as text (default)
+    - `"b"` - Read as binary data (ArrayBuffer)
+  </ParamField>
+  
+  **Returns:**
+  <ResponseField name="content" type="string | ArrayBuffer">
+    File contents as string or ArrayBuffer (if binary mode)
+  </ResponseField>
+</ResponseField>
+
+<Warning>
+`open()` can **only** be called from the init context. This restriction allows k6 to determine which local files to bundle when distributing tests across multiple nodes.
+</Warning>
+
+## Global Variables
+
+These variables are available throughout your script:
+
+### Environment Variables
+
+<ParamField path="__ENV" type="object">
+  Object containing environment variables as key-value pairs. Access environment variables passed to k6 via `-e` or `--env` flags.
+  
+  **Example:**
+  ```javascript
+  const baseUrl = __ENV.BASE_URL || 'https://test.k6.io';
+  ```
+</ParamField>
+
+### VU Information
+
+<ParamField path="__VU" type="number">
+  Current VU (Virtual User) number. Starts at 1 and increments for each VU.
+  
+  **Example:**
+  ```javascript
+  console.log(`Running as VU ${__VU}`);
+  ```
+</ParamField>
+
+<ParamField path="__ITER" type="number">
+  Current iteration number for the VU. Starts at 0 and increments with each iteration.
+  
+  **Example:**
+  ```javascript
+  console.log(`Iteration ${__ITER}`);
+  ```
+</ParamField>
+
+<Note>
+For more comprehensive execution context information, use the `k6/execution` module which provides detailed metadata about scenarios, instances, and test state.
+</Note>
+
+## Examples
+
+### Loading JSON Data
+
+<CodeGroup>
+```javascript Using SharedArray
+import { SharedArray } from 'k6/data';
+import { sleep } from 'k6';
+
+const data = new SharedArray('users', function () {
+  // open() is called in init context
+  const f = JSON.parse(open('./users.json'));
+  return f; // f must be an array
+});
+
+export default () => {
+  const randomUser = data[Math.floor(Math.random() * data.length)];
+  console.log(`${randomUser.username}, ${randomUser.password}`);
+  sleep(3);
+};
+```
+
+```javascript Direct Loading
+import { sleep } from 'k6';
+
+// Consider using SharedArray for large files
+const users = JSON.parse(open('./users.json'));
+
+export default function () {
+  const user = users[__VU - 1];
+  console.log(`${user.username}, ${user.password}`);
+  sleep(3);
+}
+```
+
+```json users.json
+[
+  {
+    "username": "user1",
+    "password": "password1"
+  },
+  {
+    "username": "user2",
+    "password": "password2"
+  },
+  {
+    "username": "user3",
+    "password": "password3"
+  }
+]
+```
+</CodeGroup>
+
+### Loading Binary Files
+
+```javascript
+import http from 'k6/http';
+import { sleep } from 'k6';
+
+const binFile = open('/path/to/file.bin', 'b');
+
+export default function () {
+  const data = {
+    field: 'this is a standard form field',
+    file: http.file(binFile, 'test.bin'),
+  };
+  
+  const res = http.post('https://example.com/upload', data);
+  sleep(3);
+}
+```
+
+### Using Environment Variables
+
+```javascript
+import http from 'k6/http';
+import { check } from 'k6';
+
+// Read environment variables in init context
+const baseUrl = __ENV.BASE_URL || 'https://test.k6.io';
+const apiKey = __ENV.API_KEY;
+
+export const options = {
+  vus: parseInt(__ENV.VUS) || 10,
+  duration: __ENV.DURATION || '30s',
+};
+
+export default function () {
+  const res = http.get(`${baseUrl}/api/users`, {
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+    },
+  });
+  
+  check(res, {
+    'status is 200': (r) => r.status === 200,
+  });
+}
+```
+
+Run with environment variables:
+
+```bash
+k6 run -e BASE_URL=https://api.example.com -e API_KEY=secret123 -e VUS=20 script.js
+```
+
+### Per-VU Data Assignment
+
+```javascript
+import { SharedArray } from 'k6/data';
+import http from 'k6/http';
+
+const users = new SharedArray('users', () => {
+  return JSON.parse(open('./users.json'));
+});
+
+export default function () {
+  // Each VU gets a specific user
+  const user = users[__VU - 1];
+  
+  const res = http.post('https://test.k6.io/login', {
+    username: user.username,
+    password: user.password,
+  });
+  
+  console.log(`VU ${__VU} logged in as ${user.username}`);
+}
+```
+
+### Conditional Configuration
+
+```javascript
+import http from 'k6/http';
+
+const environment = __ENV.ENVIRONMENT || 'dev';
+
+const config = {
+  dev: {
+    baseUrl: 'https://dev.example.com',
+    vus: 5,
+    duration: '1m',
+  },
+  staging: {
+    baseUrl: 'https://staging.example.com',
+    vus: 20,
+    duration: '5m',
+  },
+  prod: {
+    baseUrl: 'https://example.com',
+    vus: 100,
+    duration: '10m',
+  },
+};
+
+const currentConfig = config[environment];
+
+export const options = {
+  vus: currentConfig.vus,
+  duration: currentConfig.duration,
+};
+
+export default function () {
+  http.get(`${currentConfig.baseUrl}/api/health`);
+}
+```
+
+Run with:
+
+```bash
+k6 run -e ENVIRONMENT=staging script.js
+```
+
+## Memory Efficiency with SharedArray
+
+<Warning>
+`open()` often consumes a large amount of memory because every VU keeps a separate copy of the file in memory.
+</Warning>
+
+To reduce memory consumption:
+
+### Use SharedArray
+
+```javascript
+import { SharedArray } from 'k6/data';
+
+// Good: Memory is shared between all VUs
+const data = new SharedArray('my-data', () => {
+  return JSON.parse(open('./large-file.json'));
+});
+```
+
+### Use k6/experimental/fs
+
+```javascript
+import { open } from 'k6/experimental/fs';
+
+// Good: Memory-efficient file handling
+const file = await open('large-file.csv');
+
+export default async function () {
+  const buffer = new Uint8Array(1024);
+  await file.read(buffer);
+}
+```
+
+## Init Context vs Default Function
+
+| Aspect | Init Context | Default Function |
+|--------|-------------|------------------|
+| **Execution** | Once per VU at startup | Every iteration |
+| **Purpose** | Setup and initialization | Test logic |
+| **File Access** | `open()` available | `open()` NOT available |
+| **Variables** | Define globals | Use globals |
+| **Performance** | Runs before metrics collection | Measured in test metrics |
+| **Async Operations** | Limited support | Full async/await support |
+
+### Code Example
+
+```javascript
+import http from 'k6/http';
+import { check } from 'k6';
+
+// ========================================
+// INIT CONTEXT - Runs once per VU
+// ========================================
+
+console.log('Init: Loading data...'); // Runs once
+const users = JSON.parse(open('./users.json'));
+const baseUrl = __ENV.BASE_URL || 'https://test.k6.io';
+
+export const options = {
+  vus: 10,
+  iterations: 100,
+};
+
+// ========================================
+// DEFAULT FUNCTION - Runs every iteration
+// ========================================
+
+export default function () {
+  console.log(`Iteration ${__ITER} starting...`); // Runs every iteration
+  
+  const user = users[__VU % users.length];
+  const res = http.get(`${baseUrl}/user/${user.id}`);
+  
+  check(res, {
+    'status is 200': (r) => r.status === 200,
+  });
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Minimize Init Context Work">
+    Keep init context code minimal and fast. Heavy operations in init context delay test startup and increase memory usage per VU.
+    
+    ```javascript
+    // Good: Simple initialization
+    const config = JSON.parse(open('./config.json'));
+    
+    // Bad: Heavy processing in init context
+    const data = processLargeDataset(open('./huge-file.csv'));
+    ```
+  </Accordion>
+  
+  <Accordion title="Use SharedArray for Large Data">
+    Always use `SharedArray` when loading large files to avoid memory duplication across VUs.
+    
+    ```javascript
+    import { SharedArray } from 'k6/data';
+    
+    const data = new SharedArray('large-dataset', () => {
+      return JSON.parse(open('./large-file.json'));
+    });
+    ```
+  </Accordion>
+  
+  <Accordion title="Validate Environment Variables">
+    Provide defaults for environment variables and validate required ones in init context.
+    
+    ```javascript
+    const apiKey = __ENV.API_KEY;
+    if (!apiKey) {
+      throw new Error('API_KEY environment variable is required');
+    }
+    
+    const baseUrl = __ENV.BASE_URL || 'https://default.example.com';
+    ```
+  </Accordion>
+  
+  <Accordion title="Use __VU and __ITER Appropriately">
+    Use `__VU` for per-VU data distribution and `__ITER` for iteration-specific logic.
+    
+    ```javascript
+    // Assign user based on VU ID
+    const user = users[__VU - 1];
+    
+    // Skip first iteration (warmup)
+    if (__ITER === 0) {
+      return;
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="k6/execution" icon="gauge" href="/api/execution-context">
+    Detailed execution context and metadata
+  </Card>
+  <Card title="SharedArray" icon="share-nodes" href="/api/shared-array">
+    Share data efficiently between VUs
+  </Card>
+  <Card title="k6/experimental/fs" icon="folder" href="/api/k6-experimental">
+    Memory-efficient file operations
+  </Card>
+  <Card title="Test Lifecycle" icon="arrows-rotate" href="/guides/test-lifecycle">
+    Understanding k6 execution phases
+  </Card>
+</CardGroup>

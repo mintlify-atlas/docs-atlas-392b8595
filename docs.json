@@ -1,122 +1,195 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "Grafana k6",
+  "theme": "aspen",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#FF6C0C",
+    "light": "#FFB280",
+    "dark": "#D95500"
   },
-  "favicon": "/favicon.svg",
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/grafana/k6"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/grafana/k6",
+      "website": "https://k6.io",
+      "slack": "https://k6.io/slack"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Get Started",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Introduction",
+            "pages": ["introduction", "why-k6"]
+          },
+          {
+            "group": "Quick Start",
+            "pages": ["get-started/installation", "get-started/first-test", "get-started/results"]
+          }
+        ]
+      },
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Using k6",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
+              "using-k6/overview",
+              "using-k6/test-lifecycle",
+              "using-k6/http-requests",
+              "using-k6/checks",
+              "using-k6/thresholds",
+              "using-k6/options",
+              "using-k6/metrics",
+              "using-k6/tags-and-groups",
+              "using-k6/scenarios"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Testing Guides",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "testing-guides/test-types",
+              "testing-guides/api-load-testing",
+              "testing-guides/load-testing-websites",
+              "testing-guides/distributed-tests",
+              "testing-guides/automated-testing",
+              "testing-guides/performance-monitoring"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Browser Testing",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "browser/overview",
+              "browser/getting-started",
+              "browser/how-to-write-tests",
+              "browser/best-practices"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Results & Visualization",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "results/overview",
+              "results/end-of-test",
+              "results/real-time",
+              "results/grafana-dashboards",
+              "results/web-dashboard"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Core API",
             "pages": [
-              "api-reference/introduction"
+              "api/k6",
+              "api/k6-http",
+              "api/k6-metrics",
+              "api/k6-data",
+              "api/k6-encoding",
+              "api/k6-crypto"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Browser API",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api/k6-browser"
+            ]
+          },
+          {
+            "group": "Protocol APIs",
+            "pages": [
+              "api/k6-websockets",
+              "api/k6-ws",
+              "api/k6-net-grpc"
+            ]
+          },
+          {
+            "group": "Extension APIs",
+            "pages": [
+              "api/k6-experimental"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "api/k6-html",
+              "api/k6-timers",
+              "api/init-context",
+              "api/execution-context"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Extensions",
+        "groups": [
+          {
+            "group": "Extensions",
+            "pages": [
+              "extensions/overview",
+              "extensions/explore",
+              "extensions/create",
+              "extensions/bundle"
+            ]
+          },
+          {
+            "group": "Popular Extensions",
+            "pages": [
+              "extensions/xk6-disruptor",
+              "extensions/browser",
+              "extensions/protocol-extensions"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Resources",
+        "groups": [
+          {
+            "group": "Examples",
+            "pages": [
+              "examples/overview",
+              "examples/http-authentication",
+              "examples/api-crud-operations",
+              "examples/websockets",
+              "examples/data-uploads",
+              "examples/correlation-and-dynamic-data"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "reference/glossary",
+              "reference/options",
+              "reference/environment-variables",
+              "reference/archive",
+              "reference/integrations"
+            ]
+          },
+          {
+            "group": "Cloud & Studio",
+            "pages": [
+              "cloud/overview",
+              "studio/overview"
+            ]
+          },
+          {
+            "group": "Release Notes",
+            "pages": [
+              "release-notes/overview"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

@@ -1,0 +1,462 @@
+---
+title: Protocol Extensions
+description: Extend k6 with support for MQTT, Redis, SQL, and other protocols beyond HTTP
+icon: network-wired
+---
+
+k6 protocol extensions enable you to test systems using protocols beyond HTTP and WebSockets. Official protocol extensions are maintained by Grafana Labs and support automatic extension resolution.
+
+## Overview
+
+Protocol extensions let you:
+
+- Test message brokers (MQTT, Kafka)
+- Load test databases (Redis, SQL)
+- Validate IoT infrastructure
+- Test event-driven architectures
+- Simulate thousands of protocol clients
+
+## MQTT
+
+The `k6/x/mqtt` extension adds first-class support for the MQTT protocol, enabling you to test MQTT brokers and IoT infrastructure.
+
+### Key features
+
+- Event-driven architecture with lifecycle events (`connect`, `message`, `end`, `reconnect`, `error`)
+- Synchronous and asynchronous methods for all operations
+- Quality of Service (QoS) levels: 0, 1, and 2
+- Message retention and Last Will and Testament (LWT) support
+- Multiple broker URL schemas: `mqtt://`, `mqtts://`, `ws://`, `wss://`
+- SSL/TLS support with standard k6 TLS configuration
+- Automatic metrics collection
+
+### Basic example
+
+```javascript
+import { Client } from 'k6/x/mqtt';
+
+export default function () {
+  const client = new Client();
+
+  client.on('connect', async () => {
+    console.log('Connected to MQTT broker');
+    client.subscribe('greeting');
+    client.publish('greeting', 'Hello MQTT!');
+  });
+
+  client.on('message', (topic, message) => {
+    const str = String.fromCharCode.apply(null, new Uint8Array(message));
+    console.info('topic:', topic, 'message:', str);
+    client.end();
+  });
+
+  client.on('end', () => {
+    console.log('Disconnected from MQTT broker');
+  });
+
+  client.connect(__ENV['MQTT_BROKER_ADDRESS'] || 'mqtt://broker.emqx.io:1883');
+}
+```
+
+### Async programming
+
+Use async/await with MQTT event handlers:
+
+```javascript
+import { Client } from 'k6/x/mqtt';
+
+export default function () {
+  const client = new Client();
+
+  client.on('connect', async () => {
+    console.log('Connected to MQTT broker');
+    await client.subscribeAsync('probe');
+
+    const intervalId = setInterval(() => {
+      client.publish('probe', 'ping MQTT!');
+    }, 1000);
+
+    setTimeout(() => {
+      clearInterval(intervalId);
+      client.end();
+    }, 3100);
+  });
+
+  client.on('message', (topic, message) => {
+    console.info(String.fromCharCode.apply(null, new Uint8Array(message)));
+  });
+
+  client.on('end', () => {
+    console.log('Disconnected from MQTT broker');
+  });
+
+  client.connect(__ENV['MQTT_BROKER_ADDRESS'] || 'mqtt://broker.emqx.io:1883');
+}
+```
+
+### QoS levels
+
+```javascript
+import { Client, QoS } from 'k6/x/mqtt';
+
+export default function () {
+  const client = new Client();
+
+  client.on('connect', () => {
+    // Subscribe with QoS 1 (at least once)
+    client.subscribe('sensor/data', { qos: QoS.AtLeastOnce });
+
+    // Publish with QoS 2 (exactly once)
+    client.publish('sensor/data', 'temperature:22.5', { qos: QoS.ExactlyOnce });
+  });
+
+  client.connect('mqtt://localhost:1883');
+}
+```
+
+### MQTT metrics
+
+The extension automatically generates metrics:
+
+- `mqtt_connects` - Connection attempts
+- `mqtt_connect_duration` - Connection time
+- `mqtt_publishes` - Number of publish operations
+- `mqtt_subscribes` - Number of subscribe operations
+- `mqtt_messages_received` - Received messages
+- `mqtt_messages_sent` - Sent messages
+
+### Use cases
+
+<CardGroup cols={2}>
+  <Card title="IoT load testing" icon="microchip">
+    Simulate thousands of IoT devices publishing sensor data
+  </Card>
+  
+  <Card title="Message throughput" icon="gauge">
+    Test MQTT broker performance and message delivery rates
+  </Card>
+  
+  <Card title="QoS validation" icon="shield-check">
+    Verify Quality of Service guarantees under load
+  </Card>
+  
+  <Card title="Event-driven systems" icon="bolt">
+    Test MQTT-based microservices and event architectures
+  </Card>
+</CardGroup>
+
+## Redis
+
+The `k6/x/redis` extension provides a client library for interacting with Redis databases directly from k6 scripts.
+
+### Features
+
+- Load test Redis databases
+- Use Redis as a data store for test-script logic
+- Promise-based async API
+- Support for common Redis commands
+
+### Basic example
+
+```javascript
+import redis from 'k6/x/redis';
+
+export const options = {
+  vus: 10,
+  duration: '30s',
+};
+
+const client = new redis.Client('redis://localhost:6379');
+
+export default async function () {
+  // Set a value
+  await client.set('key', 'value');
+
+  // Get the value
+  const value = await client.get('key');
+  console.log('Retrieved:', value);
+
+  // Increment a counter
+  await client.incr('counter');
+
+  // Check if key exists
+  const exists = await client.exists('key');
+  console.log('Key exists:', exists);
+}
+```
+
+### Connection options
+
+```javascript
+import redis from 'k6/x/redis';
+
+const client = new redis.Client({
+  host: 'localhost',
+  port: 6379,
+  password: 'your-password',
+  db: 0,
+  dialTimeout: '5s',
+  readTimeout: '3s',
+  writeTimeout: '3s',
+});
+```
+
+### Common operations
+
+```javascript
+import redis from 'k6/x/redis';
+
+const client = new redis.Client('redis://localhost:6379');
+
+export default async function () {
+  // String operations
+  await client.set('user:1:name', 'Alice');
+  await client.setex('session:abc', 3600, 'session-data'); // With expiry
+  const name = await client.get('user:1:name');
+
+  // Hash operations
+  await client.hset('user:1', 'email', 'alice@example.com');
+  await client.hset('user:1', 'age', '30');
+  const email = await client.hget('user:1', 'email');
+  const user = await client.hgetall('user:1');
+
+  // List operations
+  await client.lpush('queue:jobs', 'job1');
+  await client.rpush('queue:jobs', 'job2');
+  const job = await client.lpop('queue:jobs');
+
+  // Set operations
+  await client.sadd('users:active', 'user1', 'user2', 'user3');
+  const members = await client.smembers('users:active');
+
+  // Delete keys
+  await client.del('key');
+}
+```
+
+### Use cases
+
+<CardGroup cols={2}>
+  <Card title="Cache load testing" icon="bolt">
+    Test Redis cache performance under high load
+  </Card>
+  
+  <Card title="Session storage" icon="database">
+    Validate session management at scale
+  </Card>
+  
+  <Card title="Test data sharing" icon="share-nodes">
+    Share data between VUs using Redis
+  </Card>
+  
+  <Card title="Rate limiting" icon="gauge-high">
+    Test rate limiting implementations
+  </Card>
+</CardGroup>
+
+## SQL
+
+The `k6/x/sql` extension enables testing of SQL databases including PostgreSQL, MySQL, SQLite, and more.
+
+### Supported databases
+
+- PostgreSQL
+- MySQL / MariaDB
+- Microsoft SQL Server
+- SQLite
+- ClickHouse
+
+### Basic example
+
+```javascript
+import sql from 'k6/x/sql';
+
+const db = sql.open('postgres', 'postgres://user:password@localhost:5432/testdb?sslmode=disable');
+
+export default function () {
+  // Execute a query
+  const results = sql.query(db, 'SELECT * FROM users WHERE active = $1', true);
+  console.log(`Found ${results.length} active users`);
+
+  // Insert data
+  sql.exec(db, 'INSERT INTO users (name, email) VALUES ($1, $2)', 'Alice', 'alice@example.com');
+
+  // Execute with multiple rows
+  for (let i = 0; i < 10; i++) {
+    sql.exec(db, 'INSERT INTO logs (message) VALUES ($1)', `Log entry ${i}`);
+  }
+}
+
+export function teardown() {
+  db.close();
+}
+```
+
+### Connection strings
+
+<CodeGroup>
+```javascript PostgreSQL
+const db = sql.open('postgres', 'postgres://user:password@localhost:5432/database?sslmode=disable');
+```
+
+```javascript MySQL
+const db = sql.open('mysql', 'user:password@tcp(localhost:3306)/database');
+```
+
+```javascript SQLite
+const db = sql.open('sqlite3', './test.db');
+```
+
+```javascript SQL Server
+const db = sql.open('sqlserver', 'sqlserver://user:password@localhost:1433?database=testdb');
+```
+</CodeGroup>
+
+### Transaction example
+
+```javascript
+import sql from 'k6/x/sql';
+
+const db = sql.open('postgres', 'postgres://localhost:5432/testdb');
+
+export default function () {
+  // Begin transaction
+  const tx = db.begin();
+
+  try {
+    // Execute queries in transaction
+    tx.exec('UPDATE accounts SET balance = balance - 100 WHERE id = 1');
+    tx.exec('UPDATE accounts SET balance = balance + 100 WHERE id = 2');
+
+    // Commit transaction
+    tx.commit();
+  } catch (error) {
+    // Rollback on error
+    tx.rollback();
+    console.error('Transaction failed:', error);
+  }
+}
+```
+
+### Use cases
+
+<CardGroup cols={2}>
+  <Card title="Database load testing" icon="database">
+    Test database performance under concurrent queries
+  </Card>
+  
+  <Card title="Connection pooling" icon="link">
+    Validate connection pool behavior
+  </Card>
+  
+  <Card title="Transaction testing" icon="arrows-rotate">
+    Test transaction isolation and deadlocks
+  </Card>
+  
+  <Card title="Query performance" icon="gauge">
+    Measure query execution times at scale
+  </Card>
+</CardGroup>
+
+## Using protocol extensions
+
+All official protocol extensions support automatic resolution:
+
+```javascript
+import mqtt from 'k6/x/mqtt';
+import redis from 'k6/x/redis';
+import sql from 'k6/x/sql';
+
+// Use extensions directly - k6 loads them automatically
+```
+
+Run your test:
+
+```bash
+k6 run script.js
+```
+
+### Build custom binary
+
+To bundle protocol extensions in a custom binary:
+
+```bash
+xk6 build \
+  --with github.com/grafana/xk6-sql@latest \
+  --with github.com/grafana/xk6-output-prometheus-remote
+```
+
+## Combining protocols
+
+Test complex systems using multiple protocols:
+
+```javascript
+import http from 'k6/http';
+import { Client as MQTTClient } from 'k6/x/mqtt';
+import redis from 'k6/x/redis';
+import { check } from 'k6';
+
+const redisClient = new redis.Client('redis://localhost:6379');
+
+export default function () {
+  // HTTP API call
+  const res = http.post('https://api.example.com/orders', JSON.stringify({
+    product: 'widget',
+    quantity: 1,
+  }));
+
+  check(res, { 'order created': (r) => r.status === 201 });
+  const orderId = res.json('id');
+
+  // Store in Redis
+  redisClient.set(`order:${orderId}`, res.body);
+
+  // Publish MQTT notification
+  const mqtt = new MQTTClient();
+  mqtt.on('connect', () => {
+    mqtt.publish('orders/new', `Order ${orderId} created`);
+    mqtt.end();
+  });
+  mqtt.connect('mqtt://localhost:1883');
+}
+```
+
+## Best practices
+
+<CardGroup cols={2}>
+  <Card title="Connection pooling" icon="link">
+    Reuse connections in the init context when possible
+  </Card>
+  
+  <Card title="Async operations" icon="clock">
+    Use async/await for non-blocking protocol operations
+  </Card>
+  
+  <Card title="Error handling" icon="triangle-exclamation">
+    Always handle connection errors and timeouts
+  </Card>
+  
+  <Card title="Resource cleanup" icon="broom">
+    Close connections in teardown or finally blocks
+  </Card>
+</CardGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Explore Extensions" icon="compass" href="/extensions/explore">
+    Discover more k6 extensions
+  </Card>
+  
+  <Card title="Build Custom Binary" icon="box" href="/extensions/bundle">
+    Bundle extensions with xk6
+  </Card>
+  
+  <Card title="xk6-disruptor" icon="bolt" href="/extensions/xk6-disruptor">
+    Add chaos testing capabilities
+  </Card>
+  
+  <Card title="Browser Extension" icon="browser" href="/extensions/browser">
+    Test frontend with browser automation
+  </Card>
+</CardGroup>

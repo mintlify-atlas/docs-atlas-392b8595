@@ -1,0 +1,307 @@
+---
+title: Install k6
+description: Install the k6 CLI on Linux, macOS, Windows, or use Docker to start load testing your applications.
+---
+
+# Install k6
+
+k6 has packages for Linux, Mac, and Windows. Alternatively, you can use a Docker container or a standalone binary.
+
+<Info>
+You can also use k6 Studio, a desktop application that helps you generate k6 scripts from browser recordings without writing code. Learn more in the [k6 Studio](#k6-studio) section.
+</Info>
+
+## Choose your platform
+
+<Tabs>
+  <Tab title="macOS">
+    Install k6 using [Homebrew](https://brew.sh/):
+
+    ```bash
+    brew install k6
+    ```
+
+    Verify the installation:
+
+    ```bash
+    k6 version
+    ```
+
+    ### Upgrade k6
+
+    To upgrade to the latest version:
+
+    ```bash
+    brew upgrade k6
+    ```
+  </Tab>
+
+  <Tab title="Linux">
+    <Tabs>
+      <Tab title="Debian/Ubuntu">
+        Add the k6 repository and install:
+
+        ```bash
+        sudo gpg -k
+        sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+        echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+        sudo apt-get update
+        sudo apt-get install k6
+        ```
+
+        Verify the installation:
+
+        ```bash
+        k6 version
+        ```
+
+        ### Upgrade k6
+
+        To upgrade to the latest version:
+
+        ```bash
+        sudo apt-get update
+        sudo apt-get install k6
+        ```
+      </Tab>
+
+      <Tab title="Fedora/CentOS">
+        Install using `dnf` (or `yum` on older versions):
+
+        ```bash
+        sudo dnf install https://dl.k6.io/rpm/repo.rpm
+        sudo dnf install k6
+        ```
+
+        Verify the installation:
+
+        ```bash
+        k6 version
+        ```
+
+        ### Upgrade k6
+
+        To upgrade to the latest version:
+
+        ```bash
+        sudo dnf upgrade k6
+        ```
+      </Tab>
+    </Tabs>
+  </Tab>
+
+  <Tab title="Windows">
+    <Tabs>
+      <Tab title="Windows Package Manager">
+        Install using the [Windows Package Manager](https://github.com/microsoft/winget-cli):
+
+        ```powershell
+        winget install k6 --source winget
+        ```
+
+        Verify the installation:
+
+        ```powershell
+        k6 version
+        ```
+
+        ### Upgrade k6
+
+        To upgrade to the latest version:
+
+        ```powershell
+        winget upgrade k6
+        ```
+      </Tab>
+
+      <Tab title="Chocolatey">
+        Install using [Chocolatey](https://chocolatey.org/):
+
+        ```powershell
+        choco install k6
+        ```
+
+        Verify the installation:
+
+        ```powershell
+        k6 version
+        ```
+
+        ### Upgrade k6
+
+        To upgrade to the latest version:
+
+        ```powershell
+        choco upgrade k6
+        ```
+      </Tab>
+
+      <Tab title="MSI Installer">
+        Download and run [the latest official installer](https://dl.k6.io/msi/k6-latest-amd64.msi).
+
+        After installation, verify from PowerShell or Command Prompt:
+
+        ```powershell
+        k6 version
+        ```
+
+        ### Upgrade k6
+
+        Download and run the latest MSI installer to upgrade.
+      </Tab>
+    </Tabs>
+  </Tab>
+
+  <Tab title="Docker">
+    Pull the official k6 Docker image:
+
+    ```bash
+    docker pull grafana/k6
+    ```
+
+    Verify the installation:
+
+    ```bash
+    docker run --rm grafana/k6 version
+    ```
+
+    ### For browser testing
+
+    If you plan to run k6 browser tests, use the image with Chromium installed:
+
+    ```bash
+    docker pull grafana/k6:master-with-browser
+    ```
+
+    ### Running tests with Docker
+
+    To run a test script with Docker, you need to mount your script into the container:
+
+    <CodeGroup>
+    ```bash Linux/macOS
+    docker run --rm -i grafana/k6 run - <script.js
+    ```
+
+    ```powershell Windows
+    cat script.js | docker run --rm -i grafana/k6 run -
+    ```
+    </CodeGroup>
+
+    <Tip>
+    The `-i` flag allows k6 to read the script from stdin, and `<` or `cat` pipes your script file into the container.
+    </Tip>
+  </Tab>
+
+  <Tab title="Binary">
+    Download the standalone binary for your platform:
+
+    1. Visit the [k6 GitHub Releases page](https://github.com/grafana/k6/releases)
+    2. Download the archive for your operating system and architecture
+    3. Extract the archive
+    4. Move the `k6` (or `k6.exe` on Windows) binary to a directory in your `PATH`
+
+    Verify the installation:
+
+    ```bash
+    k6 version
+    ```
+
+    ### Upgrade k6
+
+    Download the latest binary from the [GitHub Releases page](https://github.com/grafana/k6/releases) and replace your existing installation.
+  </Tab>
+</Tabs>
+
+## Using k6 extensions
+
+If you want to use [k6 extensions](https://grafana.com/docs/k6/latest/extensions/) to add support for additional protocols or features, you need a k6 binary built with your desired extensions.
+
+<Steps>
+  <Step title="Browse extensions">
+    Visit the [k6 extensions catalog](https://grafana.com/docs/k6/latest/extensions/explore) to find available extensions.
+  </Step>
+  <Step title="Build custom k6 binary">
+    Use the k6 build service or build locally with xk6 to create a binary with your chosen extensions.
+  </Step>
+  <Step title="Replace standard k6">
+    Use your custom k6 binary instead of the standard installation.
+  </Step>
+</Steps>
+
+Popular extensions include:
+
+- **xk6-kafka**: Test Kafka producers and consumers
+- **xk6-sql**: Query databases directly
+- **xk6-browser**: Enhanced browser testing capabilities
+- **xk6-disruptor**: Inject faults in Kubernetes for chaos testing
+
+## k6 Studio
+
+k6 Studio is a desktop application for Windows, macOS, and Linux that helps you generate k6 scripts from browser recordings without writing code.
+
+### Features
+
+- Generate protocol and browser test scripts from recordings
+- Test and debug scripts with a visual interface
+- No coding required for basic test creation
+
+### Installation
+
+Refer to the [k6 Studio installation guide](https://grafana.com/docs/k6-studio/set-up/install/) for instructions.
+
+<Info>
+k6 Studio and k6 CLI are separate tools. You can use k6 Studio to generate scripts and k6 CLI to run them.
+</Info>
+
+## Troubleshooting
+
+If you encounter installation issues:
+
+1. Check the [common installation issues guide](https://grafana.com/docs/k6/latest/set-up/install-k6/troubleshooting/)
+2. Verify your system meets the requirements
+3. Check for permission issues when installing globally
+4. Try the Docker installation as an alternative
+
+If your problem persists:
+
+- Open an issue in the [k6 GitHub repository](https://github.com/grafana/k6)
+- Ask for help in the [Grafana community forum](https://community.grafana.com/)
+
+## Configure your code editor
+
+After installing k6, enhance your development experience by configuring your code editor:
+
+<CardGroup cols={2}>
+  <Card title="VS Code" icon="vscode">
+    Install k6 TypeScript definitions for IntelliSense:
+    ```bash
+    npm install --save-dev @types/k6
+    ```
+  </Card>
+  <Card title="JetBrains IDEs" icon="code">
+    Add k6 type definitions to enable auto-completion and documentation hints.
+  </Card>
+</CardGroup>
+
+Learn more in the [Configure your code editor guide](https://grafana.com/docs/k6/latest/set-up/configure-your-code-editor/).
+
+## Next steps
+
+Now that you have k6 installed:
+
+<CardGroup cols={2}>
+  <Card
+    title="Write Your First Test"
+    icon="code"
+    href="/get-started/first-test"
+  >
+    Create and run your first k6 test script
+  </Card>
+  <Card
+    title="Understanding Results"
+    icon="chart-line"
+    href="/get-started/results"
+  >
+    Learn how to interpret k6 metrics and output
+  </Card>
+</CardGroup>

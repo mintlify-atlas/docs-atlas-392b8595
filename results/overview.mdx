@@ -1,0 +1,143 @@
+---
+title: Results & Visualization Overview
+description: Learn about all the ways you can view and analyze k6 test results, from real-time streaming to end-of-test summaries and visualization dashboards.
+---
+
+# Results & Visualization Overview
+
+k6 emits metrics with timestamps at every point of the test, providing comprehensive data about your load testing results. You can output these metric results as either **aggregated statistics** or **individual data points**, depending on your analysis needs.
+
+## Output Options
+
+k6 provides two main approaches to viewing test results:
+
+### End-of-Test Summary
+
+For a top-level test overview, k6 displays an [end-of-test summary](/results/end-of-test) when your test completes. This provides aggregated statistics including:
+
+- Threshold pass/fail results
+- Check results and success rates
+- Aggregated metrics by category (HTTP, execution, network, custom)
+- Summary statistics (avg, min, max, percentiles)
+
+The end-of-test summary is perfect for quick analysis and CI/CD integration where you need immediate feedback on test performance.
+
+### Real-Time Streaming
+
+For granular output of all metrics with timestamps, you can [stream metrics in real time](/results/real-time) to:
+
+- **File formats**: CSV, JSON
+- **External services**: InfluxDB, Prometheus, Datadog, Grafana Cloud k6, and many more
+
+Real-time streaming enables:
+
+- Live monitoring during test execution
+- Long-term storage and trend analysis
+- Integration with existing observability platforms
+- Custom processing and alerting
+
+<img src="/images/k6-results-diagram.png" alt="Diagram showing aggregated vs granular results" />
+
+## Visualization Options
+
+### Web Dashboard
+
+k6 includes a built-in [web dashboard](/results/web-dashboard) that you can enable to visualize results in real time as your test runs. The dashboard provides:
+
+- Live performance metrics and graphs
+- Real-time threshold status
+- Check results
+- Downloadable HTML reports
+
+Enable it with:
+
+```sh
+K6_WEB_DASHBOARD=true k6 run script.js
+```
+
+### Grafana Dashboards
+
+For advanced visualization and correlation with other observability data, you can use [Grafana dashboards](/results/grafana-dashboards). This approach allows you to:
+
+- Create custom dashboards with multiple data sources
+- Correlate k6 results with application and system metrics
+- Analyze performance over multiple test runs
+- Use pre-built dashboards for popular backends like InfluxDB and Prometheus
+
+## Choosing Your Approach
+
+<Tabs>
+  <Tab title="Quick Analysis">
+    Use the **end-of-test summary** for:
+    - Local test runs
+    - CI/CD pipelines
+    - Quick performance checks
+    - Threshold-based pass/fail decisions
+
+    ```sh
+    k6 run script.js
+    ```
+  </Tab>
+  <Tab title="Real-Time Monitoring">
+    Use the **web dashboard** for:
+    - Interactive test monitoring
+    - Local development
+    - Sharing results with non-technical stakeholders
+    - Generating HTML reports
+
+    ```sh
+    K6_WEB_DASHBOARD=true k6 run script.js
+    ```
+  </Tab>
+  <Tab title="Advanced Analysis">
+    Use **real-time streaming + Grafana** for:
+    - Production-grade monitoring
+    - Correlating with system metrics
+    - Long-term trend analysis
+    - Team collaboration
+
+    ```sh
+    k6 run --out influxdb=http://localhost:8086/k6db script.js
+    ```
+  </Tab>
+</Tabs>
+
+## Multiple Outputs
+
+You can combine multiple output options in a single test run:
+
+```sh
+K6_WEB_DASHBOARD=true k6 run \
+  --out json=results.json \
+  --out influxdb=http://localhost:8086/k6db \
+  script.js
+```
+
+This command:
+- Shows the default end-of-test summary
+- Displays the web dashboard at http://127.0.0.1:5665
+- Saves detailed metrics to results.json
+- Streams metrics to InfluxDB for Grafana visualization
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="End-of-Test Summary" icon="flag-checkered" href="/results/end-of-test">
+    Learn about the default summary output and how to customize it
+  </Card>
+  <Card title="Real-Time Streaming" icon="stream" href="/results/real-time">
+    Explore options for streaming metrics during test execution
+  </Card>
+  <Card title="Web Dashboard" icon="chart-line" href="/results/web-dashboard">
+    Enable the built-in web dashboard for live monitoring
+  </Card>
+  <Card title="Grafana Dashboards" icon="chart-area" href="/results/grafana-dashboards">
+    Visualize results with Grafana and pre-built dashboards
+  </Card>
+</CardGroup>
+
+## Additional Resources
+
+- [Ways to visualize k6 results](https://k6.io/blog/ways-to-visualize-k6-results/) - Blog post exploring visualization options
+- [k6 data collection pipeline](https://grafana.com/blog/2023/08/10/understanding-grafana-k6-a-simple-guide-to-the-load-testing-tool/) - Deep dive into how k6 collects and processes metrics
+- [Build an output extension](https://grafana.com/docs/k6/latest/extensions/create/output-extensions) - Create custom output formats

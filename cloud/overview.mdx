@@ -1,0 +1,285 @@
+---
+title: Grafana Cloud k6
+description: Cloud-based performance testing with k6
+icon: cloud
+---
+
+# Grafana Cloud k6
+
+Grafana Cloud k6 is a performance-testing application that's part of Grafana Cloud. It lets you leverage all of the k6 capabilities, while Grafana handles the infrastructure work of scaling servers, handling distributed load zones, and storing and aggregating metrics from your tests.
+
+## Key features
+
+<CardGroup cols={2}>
+  <Card title="Cloud execution" icon="server">
+    Run tests from multiple geographic locations without managing infrastructure.
+  </Card>
+  
+  <Card title="Built-in dashboards" icon="chart-line">
+    Visualize test results with pre-configured Grafana dashboards.
+  </Card>
+  
+  <Card title="Performance insights" icon="lightbulb">
+    Get automated insights into your application's performance.
+  </Card>
+  
+  <Card title="Team collaboration" icon="users">
+    Share test results and collaborate with your team in one place.
+  </Card>
+  
+  <Card title="Distributed testing" icon="network-wired">
+    Generate load from multiple regions simultaneously.
+  </Card>
+  
+  <Card title="Historical data" icon="clock-rotate-left">
+    Compare test runs over time to track performance trends.
+  </Card>
+</CardGroup>
+
+## Getting started
+
+<Steps>
+  <Step title="Create a Grafana Cloud account">
+    Sign up for Grafana Cloud at [grafana.com](https://grafana.com/auth/sign-up/create-user).
+  </Step>
+
+  <Step title="Get your API token">
+    Generate a k6 Cloud API token from your Grafana Cloud settings.
+  </Step>
+
+  <Step title="Login with k6 CLI">
+    Authenticate your local k6 CLI:
+
+    ```bash
+    k6 login cloud --token YOUR_API_TOKEN
+    ```
+  </Step>
+
+  <Step title="Run your first cloud test">
+    Execute any k6 script in the cloud:
+
+    ```bash
+    k6 cloud script.js
+    ```
+  </Step>
+</Steps>
+
+## Cloud vs local execution
+
+<Tabs>
+  <Tab title="Local execution">
+    Run tests from your machine with results stored locally:
+
+    ```bash
+    k6 run script.js
+    ```
+
+    **Pros:**
+    - No additional costs
+    - Full control over environment
+    - Quick iteration during development
+
+    **Cons:**
+    - Limited by local machine resources
+    - Single geographic location
+    - Manual result storage
+  </Tab>
+
+  <Tab title="Cloud execution">
+    Run tests from Grafana Cloud infrastructure:
+
+    ```bash
+    k6 cloud script.js
+    ```
+
+    **Pros:**
+    - Unlimited scale
+    - Multiple load zones
+    - Built-in result storage and visualization
+    - Team collaboration
+
+    **Cons:**
+    - Requires Grafana Cloud subscription
+    - Network latency to cloud
+  </Tab>
+
+  <Tab title="Hybrid approach">
+    Run locally and stream results to cloud:
+
+    ```bash
+    k6 run --out cloud script.js
+    ```
+
+    **Pros:**
+    - Local execution control
+    - Cloud visualization and storage
+    - Best of both worlds
+
+    **Cons:**
+    - Requires stable internet connection
+  </Tab>
+</Tabs>
+
+## Load zones
+
+Grafana Cloud k6 supports distributed testing from multiple geographic locations:
+
+- **North America**: US East, US West, Canada
+- **Europe**: Ireland, Frankfurt, London
+- **Asia Pacific**: Tokyo, Sydney, Singapore
+- **South America**: São Paulo
+
+### Configuring load zones
+
+```javascript
+export const options = {
+  ext: {
+    loadimpact: {
+      distribution: {
+        'amazon:us:ashburn': { loadZone: 'amazon:us:ashburn', percent: 50 },
+        'amazon:ie:dublin': { loadZone: 'amazon:ie:dublin', percent: 50 },
+      },
+    },
+  },
+};
+```
+
+## Cloud features
+
+### Performance insights
+
+Grafana Cloud k6 automatically analyzes your test results and provides:
+
+- **Performance trends** - Compare runs over time
+- **Anomaly detection** - Identify unusual patterns
+- **Recommendations** - Suggestions for optimization
+- **SLO tracking** - Monitor against service level objectives
+
+### Team collaboration
+
+- Share test results with team members
+- Comment on test runs
+- Set up notifications for test failures
+- Manage team access and permissions
+
+### CI/CD integration
+
+Integrate cloud tests into your pipeline:
+
+<CodeGroup>
+```yaml GitHub Actions
+- name: Run k6 cloud test
+  uses: grafana/k6-action@v0.3.1
+  with:
+    cloud: true
+    token: ${{ secrets.K6_CLOUD_TOKEN }}
+    filename: test.js
+```
+
+```yaml GitLab CI
+k6_cloud_test:
+  image: grafana/k6:latest
+  script:
+    - k6 cloud test.js
+  variables:
+    K6_CLOUD_TOKEN: $K6_CLOUD_TOKEN
+```
+</CodeGroup>
+
+## Pricing
+
+Grafana Cloud k6 offers different pricing tiers based on:
+
+- Number of virtual user hours (VUh)
+- Test frequency and duration
+- Number of load zones
+- Data retention period
+
+<Info>
+  Check [grafana.com/pricing](https://grafana.com/pricing) for current pricing details and free tier limits.
+</Info>
+
+## Migration from k6 OSS
+
+Migrating from open-source k6 to Grafana Cloud k6 is straightforward:
+
+<Steps>
+  <Step title="No code changes required">
+    Your existing k6 scripts work without modification.
+  </Step>
+
+  <Step title="Add cloud configuration (optional)">
+    Configure cloud-specific options if needed:
+
+    ```javascript
+    export const options = {
+      ext: {
+        loadimpact: {
+          projectID: YOUR_PROJECT_ID,
+          name: 'My Test',
+        },
+      },
+    };
+    ```
+  </Step>
+
+  <Step title="Run with cloud command">
+    Change `k6 run` to `k6 cloud`:
+
+    ```bash
+    k6 cloud script.js
+    ```
+  </Step>
+</Steps>
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Start with local development">
+    Develop and debug your tests locally before running them in the cloud to save costs and iterate faster.
+  </Accordion>
+
+  <Accordion title="Use appropriate load zones">
+    Select load zones close to your users or infrastructure for realistic results.
+  </Accordion>
+
+  <Accordion title="Monitor VU hours">
+    Track your VU hour consumption to optimize test duration and frequency.
+  </Accordion>
+
+  <Accordion title="Leverage thresholds">
+    Set thresholds to automatically fail tests that don't meet performance criteria:
+
+    ```javascript
+    export const options = {
+      thresholds: {
+        http_req_duration: ['p(95)<500'],
+        http_req_failed: ['rate<0.01'],
+      },
+    };
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Documentation
+
+For comprehensive Grafana Cloud k6 documentation, visit:
+
+[grafana.com/docs/grafana-cloud/testing/k6](https://grafana.com/docs/grafana-cloud/testing/k6/)
+
+## Related resources
+
+<CardGroup cols={2}>
+  <Card title="Distributed tests" icon="server" href="/testing-guides/distributed-tests">
+    Running tests across multiple machines
+  </Card>
+  <Card title="Automated testing" icon="robot" href="/testing-guides/automated-testing">
+    CI/CD integration guide
+  </Card>
+  <Card title="Results output" icon="chart-line" href="/results/overview">
+    Understanding and exporting results
+  </Card>
+  <Card title="k6 Studio" icon="desktop" href="/studio/overview">
+    Visual test creation tool
+  </Card>
+</CardGroup>

@@ -1,0 +1,300 @@
+---
+title: 'Getting Started with Browser Testing'
+description: 'Learn how to write and run your first k6 browser test script'
+---
+
+# Getting Started with Browser Testing
+
+k6 browser tests allow you to simulate real user interactions with web applications, such as clicking buttons, filling out forms, and verifying page content. This helps you test not only backend performance, but also frontend reliability and user experience.
+
+## Prerequisites
+
+Before you begin, you'll need:
+
+- Basic knowledge of JavaScript or TypeScript
+- A code editor (Visual Studio Code or JetBrains)
+- A Chromium-based browser (such as Google Chrome) installed locally
+- k6 installed on your machine
+
+## Basic Structure
+
+Every k6 browser script follows a common structure with these core components:
+
+<Steps>
+
+### Default Function
+
+This is where the test logic resides. For browser scripts, it must be written as an `async` function to handle browser actions.
+
+### Imports
+
+Import k6 modules to extend functionality. Note that k6 uses its own JavaScript runtime, not Node.js.
+
+### Options
+
+Configure test execution, including the number of virtual users, duration, and performance thresholds.
+
+### Lifecycle Operations (Optional)
+
+Run code before or after test execution, such as parsing data or setting up resources.
+
+</Steps>
+
+## Key Concepts
+
+### Browser Type Configuration
+
+A browser script must set `options.browser.type` in the options object:
+
+```javascript
+export const options = {
+  scenarios: {
+    ui: {
+      executor: 'shared-iterations',
+      options: {
+        browser: {
+          type: 'chromium',
+        },
+      },
+    },
+  },
+};
+```
+
+<Warning>
+If the browser type isn't set, k6 will throw an error when executing your script.
+</Warning>
+
+### Asynchronous Operations
+
+Browser interactions (like navigation and clicks) are asynchronous, so your test must use `async`/`await`:
+
+```javascript
+export default async function () {
+  const page = await browser.newPage();
+  await page.goto('https://example.com');
+  await page.locator('button').click();
+}
+```
+
+### Locators
+
+The Locator API finds and interacts with elements on a page:
+
+```javascript
+const button = page.locator('button[name="submit"]');
+await button.click();
+```
+
+Locators work with dynamic web pages and SPAs like React, finding elements even if the underlying frame navigates.
+
+## Write Your First Browser Test
+
+Let's create a browser test that loads a page, clicks a button, takes a screenshot, and verifies content.
+
+<Steps>
+
+### Create a Test File
+
+Create a JavaScript file named `my-first-browser-test.js`:
+
+```bash
+touch my-first-browser-test.js
+```
+
+### Import k6 Modules
+
+Add the necessary imports at the top of your file:
+
+```javascript
+import http from 'k6/http';
+import exec from 'k6/execution';
+import { browser } from 'k6/browser';
+import { sleep, check, fail } from 'k6';
+```
+
+### Define Options
+
+Configure the test to use the browser executor:
+
+```javascript
+export const options = {
+  scenarios: {
+    ui: {
+      executor: 'shared-iterations',
+      vus: 1,
+      iterations: 1,
+      options: {
+        browser: {
+          type: 'chromium',
+        },
+      },
+    },
+  },
+};
+```
+
+### Add Setup Function
+
+Check if the target site is available before running the test:
+
+```javascript
+const BASE_URL = __ENV.BASE_URL || 'https://quickpizza.grafana.com';
+
+export function setup() {
+  const res = http.get(BASE_URL);
+  if (res.status !== 200) {
+    exec.test.abort(
+      `Got unexpected status code ${res.status} when trying to setup. Exiting.`
+    );
+  }
+}
+```
+
+### Write the Default Function
+
+Implement the main test logic with browser interactions:
+
+```javascript
+export default async function () {
+  let checkData;
+  const page = await browser.newPage();
+
+  try {
+    await page.goto(BASE_URL);
+
+    checkData = await page.locator('h1').textContent();
+    check(page, {
+      header: checkData === 'Looking to break out of your pizza routine?',
+    });
+
+    await page.locator('//button[. = "Pizza, Please!"]').click();
+    await page.waitForTimeout(500);
+
+    await page.screenshot({ path: 'screenshot.png' });
+
+    checkData = await page.locator('div#recommendations').textContent();
+    check(page, {
+      recommendation: checkData !== '',
+    });
+  } catch (error) {
+    fail(`Browser iteration failed: ${error.message}`);
+  } finally {
+    await page.close();
+  }
+
+  sleep(1);
+}
+```
+
+</Steps>
+
+## Complete Example
+
+Here's the full script:
+
+```javascript
+import http from 'k6/http';
+import exec from 'k6/execution';
+import { browser } from 'k6/browser';
+import { sleep, check, fail } from 'k6';
+
+const BASE_URL = __ENV.BASE_URL || 'https://quickpizza.grafana.com';
+
+export const options = {
+  scenarios: {
+    ui: {
+      executor: 'shared-iterations',
+      vus: 1,
+      iterations: 1,
+      options: {
+        browser: {
+          type: 'chromium',
+        },
+      },
+    },
+  },
+};
+
+export function setup() {
+  const res = http.get(BASE_URL);
+  if (res.status !== 200) {
+    exec.test.abort(
+      `Got unexpected status code ${res.status} when trying to setup. Exiting.`
+    );
+  }
+}
+
+export default async function () {
+  let checkData;
+  const page = await browser.newPage();
+
+  try {
+    await page.goto(BASE_URL);
+
+    checkData = await page.locator('h1').textContent();
+    check(page, {
+      header: checkData === 'Looking to break out of your pizza routine?',
+    });
+
+    await page.locator('//button[. = "Pizza, Please!"]').click();
+    await page.waitForTimeout(500);
+
+    await page.screenshot({ path: 'screenshot.png' });
+
+    checkData = await page.locator('div#recommendations').textContent();
+    check(page, {
+      recommendation: checkData !== '',
+    });
+  } catch (error) {
+    fail(`Browser iteration failed: ${error.message}`);
+  } finally {
+    await page.close();
+  }
+
+  sleep(1);
+}
+```
+
+## Run Your Test
+
+Execute your browser test with:
+
+```bash
+k6 run my-first-browser-test.js
+```
+
+<Tip>
+For a headful browser (visible window), run:
+```bash
+K6_BROWSER_HEADLESS=false k6 run my-first-browser-test.js
+```
+</Tip>
+
+## Understanding the Output
+
+After the test completes, you'll see metrics like:
+
+- **Checks** - Assertion results
+- **HTTP metrics** - Request duration and failures
+- **Browser metrics** - Data sent/received, request duration
+- **Web Vitals** - FCP, LCP, CLS, FID, INP, TTFB
+
+## Extending Your Test
+
+Once you're comfortable with the basics, extend your browser test by:
+
+- Simulating complex user flows (multiple pages, form submissions)
+- Adding more checks and assertions to validate UI elements
+- Creating hybrid performance tests combining frontend and backend testing
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="How to Write Tests" href="/browser/how-to-write-tests">
+    Learn advanced browser testing patterns
+  </Card>
+  <Card title="Best Practices" href="/browser/best-practices">
+    Optimize your tests for reliability and maintainability
+  </Card>
+</CardGroup>

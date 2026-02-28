@@ -1,0 +1,368 @@
+---
+title: 'HTTP Requests'
+description: 'Learn how to make HTTP requests in k6, use different HTTP methods, and organize URLs for better metrics analysis.'
+---
+
+HTTP requests are the foundation of most k6 load tests. The `k6/http` module provides methods for all standard HTTP operations.
+
+## Making HTTP requests
+
+The simplest HTTP request is a GET request:
+
+```javascript
+import http from 'k6/http';
+
+export default function () {
+  http.get('http://test.k6.io');
+}
+```
+
+### POST request with payload
+
+Here's a more complex example showing a POST request with JSON payload:
+
+```javascript
+import http from 'k6/http';
+
+export default function () {
+  const url = 'http://test.k6.io/login';
+  const payload = JSON.stringify({
+    email: 'aaa',
+    password: 'bbb',
+  });
+
+  const params = {
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  };
+
+  http.post(url, payload, params);
+}
+```
+
+## Available HTTP methods
+
+The `k6/http` module supports all standard HTTP methods:
+
+| Method | Description |
+|--------|-------------|
+| `http.get()` | Issue an HTTP GET request |
+| `http.post()` | Issue an HTTP POST request |
+| `http.put()` | Issue an HTTP PUT request |
+| `http.patch()` | Issue an HTTP PATCH request |
+| `http.del()` | Issue an HTTP DELETE request |
+| `http.head()` | Issue an HTTP HEAD request |
+| `http.options()` | Issue an HTTP OPTIONS request |
+| `http.request()` | Issue any type of HTTP request |
+| `http.batch()` | Issue multiple HTTP requests in parallel |
+
+### Batch requests
+
+Use `http.batch()` to send multiple requests in parallel, similar to how browsers load resources:
+
+```javascript
+import http from 'k6/http';
+
+export default function () {
+  const responses = http.batch([
+    ['GET', 'https://test.k6.io/'],
+    ['GET', 'https://test.k6.io/contacts.php'],
+    ['GET', 'https://test.k6.io/news.php'],
+  ]);
+  
+  // All requests execute in parallel
+}
+```
+
+## HTTP request parameters
+
+The third parameter to HTTP methods accepts an object with request configuration:
+
+<CodeGroup>
+```javascript Headers
+import http from 'k6/http';
+
+export default function () {
+  const params = {
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer token123',
+    },
+  };
+  
+  http.get('https://test.k6.io', params);
+}
+```
+
+```javascript Custom tags
+import http from 'k6/http';
+
+export default function () {
+  const params = {
+    tags: { 
+      name: 'homepage',
+      type: 'static',
+    },
+  };
+  
+  http.get('https://test.k6.io', params);
+}
+```
+
+```javascript Redirects
+import http from 'k6/http';
+
+export default function () {
+  const params = {
+    redirects: 5,  // Follow up to 5 redirects
+  };
+  
+  http.get('https://test.k6.io', params);
+}
+```
+</CodeGroup>
+
+## Following redirects
+
+By default, k6 automatically follows redirects. You can customize this behavior:
+
+<Tabs>
+  <Tab title="Global setting">
+    Set `maxRedirects` in options to configure redirect behavior for all requests:
+    
+    ```javascript
+    export const options = {
+      maxRedirects: 10,
+    };
+    ```
+  </Tab>
+  
+  <Tab title="Per-request setting">
+    Override the global setting for specific requests:
+    
+    ```javascript
+    http.get('https://test.k6.io', { redirects: 0 }); // Don't follow redirects
+    ```
+  </Tab>
+</Tabs>
+
+## HTTP request tags
+
+k6 automatically tags HTTP requests with metadata for filtering and analysis:
+
+| Tag | Description | Example |
+|-----|-------------|--------|
+| `name` | URL or custom name | `http://test.k6.io` |
+| `method` | HTTP method | `GET`, `POST` |
+| `status` | Response status code | `200`, `404` |
+| `url` | Request URL | `http://test.k6.io` |
+| `group` | Group name (if in a group) | `::user login` |
+| `scenario` | Scenario name | `default` |
+| `expected_response` | Whether response was expected | `true`, `false` |
+
+### Example tagged output
+
+Here's how k6 stores metrics with tags:
+
+```json
+{
+  "type": "Point",
+  "metric": "http_req_duration",
+  "data": {
+    "time": "2017-06-02T23:10:29.52444541+02:00",
+    "value": 586.831127,
+    "tags": {
+      "expected_response": "true",
+      "group": "",
+      "method": "GET",
+      "name": "http://test.k6.io",
+      "scenario": "default",
+      "status": "200",
+      "url": "http://test.k6.io"
+    }
+  }
+}
+```
+
+## URL grouping
+
+When testing dynamic URLs, you'll want to group them to prevent metrics fragmentation.
+
+### The problem: dynamic URLs
+
+This code creates 100 different metrics, one for each unique URL:
+
+```javascript
+import http from 'k6/http';
+
+export default function () {
+  for (let id = 1; id <= 100; id++) {
+    http.get(`http://example.com/posts/${id}`);
+    // Results in: tags.name="http://example.com/posts/1",
+    //             tags.name="http://example.com/posts/2", etc.
+  }
+}
+```
+
+This makes analysis difficult and consumes more memory.
+
+### Solution 1: Custom name tag
+
+Set a custom `name` tag to group dynamic URLs:
+
+```javascript
+import http from 'k6/http';
+
+export default function () {
+  for (let id = 1; id <= 100; id++) {
+    http.get(`http://example.com/posts/${id}`, {
+      tags: { name: 'PostsItemURL' },
+    });
+    // All requests now have: tags.name="PostsItemURL"
+  }
+}
+```
+
+Now all 100 requests are aggregated into a single metric.
+
+### Solution 2: http.url template
+
+Use the `http.url` template literal wrapper:
+
+```javascript
+import http from 'k6/http';
+
+export default function () {
+  for (let id = 1; id <= 100; id++) {
+    http.get(http.url`http://example.com/posts/${id}`);
+    // Results in: tags.name="http://example.com/posts/${{}}"
+  }
+}
+```
+
+This automatically groups URLs by replacing variable parts with `${}`.
+
+## Response object
+
+HTTP methods return a Response object with request/response details:
+
+```javascript
+import http from 'k6/http';
+import { check } from 'k6';
+
+export default function () {
+  const res = http.get('https://test.k6.io');
+  
+  console.log(res.status);        // 200
+  console.log(res.body.length);   // Response body size
+  console.log(res.timings.duration); // Request duration in ms
+  
+  check(res, {
+    'is status 200': (r) => r.status === 200,
+    'body size > 0': (r) => r.body.length > 0,
+  });
+}
+```
+
+### Useful response properties
+
+<CardGroup cols={2}>
+  <Card title="res.status" icon="hashtag">
+    HTTP status code (200, 404, etc.)
+  </Card>
+  
+  <Card title="res.body" icon="file">
+    Response body as string
+  </Card>
+  
+  <Card title="res.json()" icon="brackets-curly">
+    Parse response body as JSON
+  </Card>
+  
+  <Card title="res.timings" icon="clock">
+    Detailed timing breakdown
+  </Card>
+  
+  <Card title="res.headers" icon="list">
+    Response headers
+  </Card>
+  
+  <Card title="res.cookies" icon="cookie">
+    Response cookies
+  </Card>
+</CardGroup>
+
+## Complete example
+
+Here's a comprehensive example combining multiple concepts:
+
+```javascript
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+
+export const options = {
+  vus: 10,
+  duration: '30s',
+};
+
+const baseUrl = 'https://quickpizza.grafana.com';
+
+export default function () {
+  // GET request with custom tags
+  const listRes = http.get(`${baseUrl}/api/pizzas`, {
+    tags: { name: 'ListPizzas' },
+  });
+  
+  check(listRes, {
+    'list status is 200': (r) => r.status === 200,
+  });
+  
+  // POST request with JSON payload
+  const createPayload = JSON.stringify({
+    name: 'Test Pizza',
+    toppings: ['cheese', 'pepperoni'],
+  });
+  
+  const createRes = http.post(
+    `${baseUrl}/api/pizzas`,
+    createPayload,
+    {
+      headers: { 'Content-Type': 'application/json' },
+      tags: { name: 'CreatePizza' },
+    }
+  );
+  
+  check(createRes, {
+    'create status is 201': (r) => r.status === 201,
+  });
+  
+  // Batch parallel requests
+  http.batch([
+    ['GET', `${baseUrl}/`, null, { tags: { name: 'Homepage' } }],
+    ['GET', `${baseUrl}/api/status`, null, { tags: { name: 'Status' } }],
+  ]);
+  
+  sleep(1);
+}
+```
+
+## Best practices
+
+<CardGroup cols={2}>
+  <Card title="Group dynamic URLs" icon="layer-group">
+    Use name tags or http.url to prevent metric fragmentation with dynamic URLs.
+  </Card>
+  
+  <Card title="Use meaningful names" icon="tag">
+    Tag requests with descriptive names for easier analysis.
+  </Card>
+  
+  <Card title="Check responses" icon="check-double">
+    Always validate critical responses with checks.
+  </Card>
+  
+  <Card title="Batch when possible" icon="clone">
+    Use http.batch() to simulate realistic browser behavior.
+  </Card>
+</CardGroup>

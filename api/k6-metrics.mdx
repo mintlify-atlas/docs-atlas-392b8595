@@ -1,0 +1,288 @@
+---
+title: k6/metrics
+description: Custom metrics for tracking performance data (Counter, Gauge, Rate, Trend)
+---
+
+The k6/metrics module provides custom metric types for tracking and aggregating performance data in your tests.
+
+## Import
+
+```javascript
+import { Counter, Gauge, Rate, Trend } from 'k6/metrics';
+```
+
+## Metric Types
+
+### Counter
+
+Counter is a cumulative metric that only increases. Use it to count events, errors, or accumulate values.
+
+<ParamField path="name" type="string" required>
+  The name of the custom metric.
+</ParamField>
+
+**Methods:**
+- `add(value, [tags])` - Add a value to the counter
+
+<CodeGroup>
+```javascript Basic counter
+import { Counter } from 'k6/metrics';
+
+const myCounter = new Counter('my_counter');
+
+export default function () {
+  myCounter.add(1);
+  myCounter.add(2, { tag1: 'myValue', tag2: 'myValue2' });
+}
+```
+
+```javascript Error tracking
+import http from 'k6/http';
+import { Counter } from 'k6/metrics';
+
+const CounterErrors = new Counter('Errors');
+
+export const options = { thresholds: { Errors: ['count<100'] } };
+
+export default function () {
+  const res = http.get('https://quickpizza.grafana.com/api/json?name=Bert');
+  const contentOK = res.json('name') === 'Bert';
+  CounterErrors.add(!contentOK);
+}
+```
+
+```javascript Tagged metrics
+import { Counter } from 'k6/metrics';
+import { sleep } from 'k6';
+import http from 'k6/http';
+
+const allErrors = new Counter('error_counter');
+
+export const options = {
+  vus: 1,
+  duration: '1m',
+  thresholds: {
+    'error_counter': [
+      'count < 10', // 10 or fewer total errors are tolerated
+    ],
+    'error_counter{errorType:authError}': [
+      // Threshold on a sub-metric (tagged values)
+      'count <= 2', // max 2 authentication errors are tolerated
+    ],
+  },
+};
+
+export default function () {
+  const auth_resp = http.post('https://quickpizza.grafana.com/api/users/token/login', {
+    username: 'default',
+    password: 'supersecure',
+  });
+
+  if (auth_resp.status >= 400) {
+    allErrors.add(1, { errorType: 'authError' }); // tagged value
+  }
+
+  const other_resp = http.get('https://quickpizza.grafana.com/api/json');
+  if (other_resp.status >= 400) {
+    allErrors.add(1); // untagged value
+  }
+
+  sleep(1);
+}
+```
+</CodeGroup>
+
+**Threshold variables:**
+- `count` - The total count value
+- `rate` - The rate of the counter
+
+Examples: `count >= 200`, `count < 10`
+
+---
+
+### Gauge
+
+Gauge holds only the latest value added. Use it for tracking current state or the most recent measurement.
+
+<ParamField path="name" type="string" required>
+  The name of the custom metric.
+</ParamField>
+
+<ParamField path="isTime" type="boolean">
+  Indicates whether the values are time values or untyped values.
+</ParamField>
+
+**Methods:**
+- `add(value, [tags])` - Add a value to the gauge (only the latest value is kept)
+
+<CodeGroup>
+```javascript Basic gauge
+import { Gauge } from 'k6/metrics';
+
+const myGauge = new Gauge('my_gauge');
+
+export default function () {
+  myGauge.add(3);
+  myGauge.add(1);
+  myGauge.add(2, { tag1: 'value', tag2: 'value2' });
+}
+```
+
+```javascript Content size tracking
+import http from 'k6/http';
+import { sleep } from 'k6';
+import { Gauge } from 'k6/metrics';
+
+const GaugeContentSize = new Gauge('ContentSize');
+
+export const options = {
+  thresholds: {
+    ContentSize: ['value<4000'],
+  },
+};
+
+export default function () {
+  const res = http.get('https://quickpizza.grafana.com');
+  GaugeContentSize.add(res.body.length);
+  sleep(1);
+}
+```
+</CodeGroup>
+
+**Threshold variable:**
+- `value` - The current gauge value
+
+Examples: `value < 200`, `value > 1`
+
+---
+
+### Rate
+
+Rate tracks the percentage of added values that are non-zero. Use it for calculating success/failure rates.
+
+<ParamField path="name" type="string" required>
+  The name of the custom metric.
+</ParamField>
+
+**Methods:**
+- `add(value, [tags])` - Add a boolean or numeric value (non-zero counts as true)
+
+<CodeGroup>
+```javascript Basic rate
+import { Rate } from 'k6/metrics';
+
+const myRate = new Rate('my_rate');
+
+export default function () {
+  myRate.add(true);
+  myRate.add(false);
+  myRate.add(1);
+  myRate.add(0, { tag1: 'value', tag2: 'value2' });
+}
+```
+
+```javascript Error rate with abort
+import { Rate } from 'k6/metrics';
+import { sleep } from 'k6';
+import http from 'k6/http';
+
+const errorRate = new Rate('errorRate');
+
+export const options = {
+  vus: 1,
+  duration: '5m',
+  thresholds: {
+    errorRate: [
+      // more than 10% of errors will abort the test
+      { threshold: 'rate < 0.1', abortOnFail: true, delayAbortEval: '1m' },
+    ],
+  },
+};
+
+export default function () {
+  const resp = http.get('https://quickpizza.grafana.com');
+
+  errorRate.add(resp.status >= 400);
+
+  sleep(1);
+}
+```
+</CodeGroup>
+
+**Threshold variable:**
+- `rate` - The rate value between 0.00 and 1.00
+
+Examples: `rate < 0.1` (less than 10%), `rate >= 0.9` (90% or more)
+
+---
+
+### Trend
+
+Trend calculates statistics on added values (min, max, average, percentiles). Use it for timing measurements and performance analysis.
+
+<ParamField path="name" type="string" required>
+  The name of the custom metric.
+</ParamField>
+
+<ParamField path="isTime" type="boolean">
+  Indicates whether the values are time values (in milliseconds) or untyped values.
+</ParamField>
+
+**Methods:**
+- `add(value, [tags])` - Add a value to the trend
+
+<CodeGroup>
+```javascript Basic trend
+import { Trend } from 'k6/metrics';
+
+const myTrend = new Trend('my_trend');
+
+export default function () {
+  myTrend.add(1);
+  myTrend.add(2, { tag1: 'value', tag2: 'value2' });
+}
+```
+
+```javascript Waiting time tracking
+import { Trend } from 'k6/metrics';
+import { sleep } from 'k6';
+import http from 'k6/http';
+
+const serverWaitingTimeOnLogin = new Trend('serverWaitingTimeOnLogin', true);
+
+export const options = {
+  vus: 1,
+  duration: '1m',
+  thresholds: {
+    serverWaitingTimeOnLogin: ['p(95) < 200'],
+  },
+};
+
+export default function () {
+  const resp = http.post('https://quickpizza.grafana.com/api/users/token/login', {
+    username: 'default',
+    password: 'supersecure',
+  });
+
+  serverWaitingTimeOnLogin.add(resp.timings.waiting);
+  sleep(1);
+}
+```
+</CodeGroup>
+
+**Threshold variables:**
+- `avg` - Average value
+- `min` - Minimum value (not recommended for thresholds)
+- `max` - Maximum value (not recommended for thresholds)
+- `med` - Median value
+- `p(N)` - Specific percentile (N between 0.0 and 100.0)
+
+Examples:
+- `p(95) < 400` - 95% of requests finish below 400ms
+- `p(99) < 1000` - 99% of requests finish within 1s
+- `p(50) < 200` - Half of requests finish within 200ms
+- `max < 3000` - Slowest request finishes within 3s
+
+<Warning>
+Don't use `min` and `max` for thresholds as they represent outliers. Use percentiles instead.
+</Warning>

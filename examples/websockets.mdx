@@ -1,0 +1,453 @@
+---
+title: 'WebSockets'
+description: 'Test real-time WebSocket connections with bidirectional messaging and event handling'
+icon: 'bolt'
+---
+
+Test WebSocket connections for real-time applications including chat, notifications, live updates, and streaming data.
+
+## WebSocket Testing Overview
+
+WebSockets provide full-duplex communication over a single TCP connection. Unlike HTTP, WebSocket connections remain open, allowing servers to push data to clients.
+
+Common use cases:
+- Real-time chat applications
+- Live notifications
+- Collaborative editing
+- Gaming servers
+- Financial market data streams
+- IoT device communication
+
+## Basic WebSocket Example
+
+This example tests the QuickPizza WebSocket API where multiple users connect and exchange messages:
+
+```javascript
+import { randomString, randomIntBetween } from 'https://jslib.k6.io/k6-utils/1.2.0/index.js';
+import ws from 'k6/ws';
+import { check, sleep } from 'k6';
+
+const sessionDuration = randomIntBetween(3000, 6000); // Session between 3-6 seconds
+
+export const options = {
+  vus: 10,
+  iterations: 10,
+};
+
+export default function () {
+  const url = `wss://quickpizza.grafana.com/ws`;
+  const params = { tags: { my_tag: 'my ws session' } };
+  const user = `user_${__VU}`;
+
+  const res = ws.connect(url, params, function (socket) {
+    socket.on('open', function open() {
+      console.log(`VU ${__VU}: connected`);
+
+      socket.send(JSON.stringify({ msg: 'Hello!', user: user }));
+
+      socket.setInterval(function timeout() {
+        socket.send(
+          JSON.stringify({
+            user: user,
+            msg: `I'm saying ${randomString(5)}`,
+            foo: 'bar',
+          })
+        );
+      }, randomIntBetween(1000, 2000)); // Send message every 1-2 seconds
+    });
+
+    socket.on('ping', function () {
+      console.log('PING!');
+    });
+
+    socket.on('pong', function () {
+      console.log('PONG!');
+    });
+
+    socket.on('close', function () {
+      console.log(`VU ${__VU}: disconnected`);
+    });
+
+    socket.on('message', function (message) {
+      const data = JSON.parse(message);
+      console.log(`VU ${__VU} received message: ${data.msg}`);
+    });
+
+    socket.setTimeout(function () {
+      console.log(`VU ${__VU}: ${sessionDuration}ms passed, leaving the website`);
+      socket.send(JSON.stringify({ msg: 'Goodbye!', user: user }));
+    }, sessionDuration);
+
+    socket.setTimeout(function () {
+      console.log(`Closing the socket forcefully 3s after graceful LEAVE`);
+      socket.close();
+    }, sessionDuration + 3000);
+  });
+
+  check(res, { 'Connected successfully': (r) => r && r.status === 101 });
+  sleep(1);
+}
+```
+
+<Note>
+Status code 101 indicates "Switching Protocols" - the expected response when upgrading from HTTP to WebSocket.
+</Note>
+
+## WebSocket Event Handlers
+
+k6 WebSocket API provides several event handlers:
+
+<Tabs>
+  <Tab title="open">
+    Triggered when the connection is established:
+    
+    ```javascript
+    socket.on('open', () => {
+      console.log('Connected to WebSocket server');
+      socket.send('Hello from k6!');
+    });
+    ```
+  </Tab>
+  
+  <Tab title="message">
+    Receives messages from the server:
+    
+    ```javascript
+    socket.on('message', (data) => {
+      const message = JSON.parse(data);
+      console.log('Received:', message);
+      
+      // Validate message structure
+      check(message, {
+        'has timestamp': (m) => m.timestamp !== undefined,
+        'valid message type': (m) => ['chat', 'notification'].includes(m.type),
+      });
+    });
+    ```
+  </Tab>
+  
+  <Tab title="close">
+    Handles connection closure:
+    
+    ```javascript
+    socket.on('close', () => {
+      console.log('Connection closed');
+    });
+    ```
+  </Tab>
+  
+  <Tab title="error">
+    Catches WebSocket errors:
+    
+    ```javascript
+    socket.on('error', (e) => {
+      console.error('WebSocket error:', e.error());
+    });
+    ```
+  </Tab>
+  
+  <Tab title="ping/pong">
+    Monitor keep-alive messages:
+    
+    ```javascript
+    socket.on('ping', () => {
+      console.log('Received ping');
+    });
+    
+    socket.on('pong', () => {
+      console.log('Received pong');
+    });
+    ```
+  </Tab>
+</Tabs>
+
+## Advanced Patterns
+
+### Authenticated WebSocket Connection
+
+Authenticate during setup and use token in WebSocket connection:
+
+```javascript
+import ws from 'k6/ws';
+import http from 'k6/http';
+import { check } from 'k6';
+
+export function setup() {
+  const loginRes = http.post(
+    'https://api.example.com/auth/login',
+    JSON.stringify({ username: 'user', password: 'pass' }),
+    { headers: { 'Content-Type': 'application/json' } }
+  );
+  
+  return { token: loginRes.json('token') };
+}
+
+export default function (data) {
+  const url = `wss://api.example.com/ws?token=${data.token}`;
+  
+  // Alternative: Pass token in headers
+  const params = {
+    headers: { 'Authorization': `Bearer ${data.token}` },
+  };
+  
+  ws.connect(url, params, function (socket) {
+    socket.on('open', () => {
+      console.log('Authenticated connection established');
+    });
+    
+    // ... handle messages
+  });
+}
+```
+
+### Message Rate Control
+
+Control how frequently messages are sent:
+
+```javascript
+export default function () {
+  const url = 'wss://api.example.com/ws';
+  const messageInterval = 2000; // Send every 2 seconds
+  const testDuration = 30000;   // Run for 30 seconds
+  
+  ws.connect(url, function (socket) {
+    socket.on('open', () => {
+      // Send messages at regular intervals
+      socket.setInterval(() => {
+        socket.send(JSON.stringify({
+          type: 'ping',
+          timestamp: Date.now(),
+        }));
+      }, messageInterval);
+      
+      // Close connection after duration
+      socket.setTimeout(() => {
+        socket.close();
+      }, testDuration);
+    });
+  });
+}
+```
+
+### Response Validation
+
+Validate server responses and track metrics:
+
+```javascript
+import { Counter, Trend } from 'k6/metrics';
+
+const messageCounter = new Counter('websocket_messages_received');
+const messageLatency = new Trend('websocket_message_latency');
+
+export default function () {
+  const url = 'wss://api.example.com/ws';
+  
+  ws.connect(url, function (socket) {
+    socket.on('open', () => {
+      // Send message with timestamp
+      socket.send(JSON.stringify({
+        type: 'echo',
+        timestamp: Date.now(),
+      }));
+    });
+    
+    socket.on('message', (data) => {
+      messageCounter.add(1);
+      
+      const message = JSON.parse(data);
+      const latency = Date.now() - message.timestamp;
+      messageLatency.add(latency);
+      
+      check(message, {
+        'response time under 1s': () => latency < 1000,
+        'valid response type': (m) => m.type === 'echo',
+      });
+    });
+  });
+}
+```
+
+## Load Testing Scenarios
+
+### Ramping VUs for WebSocket Connections
+
+Gradually increase concurrent connections:
+
+```javascript
+export const options = {
+  scenarios: {
+    websocket_load: {
+      executor: 'ramping-vus',
+      startVUs: 0,
+      stages: [
+        { duration: '30s', target: 50 },  // Ramp to 50 connections
+        { duration: '1m', target: 50 },   // Stay at 50 connections
+        { duration: '30s', target: 100 }, // Ramp to 100 connections
+        { duration: '1m', target: 100 },  // Stay at 100 connections
+        { duration: '30s', target: 0 },   // Ramp down to 0
+      ],
+    },
+  },
+};
+
+export default function () {
+  const url = 'wss://api.example.com/ws';
+  
+  ws.connect(url, function (socket) {
+    socket.on('open', () => {
+      // Simulate user activity for 5 minutes
+      socket.setTimeout(() => {
+        socket.close();
+      }, 300000);
+    });
+  });
+}
+```
+
+### Multiple WebSocket Connections per VU
+
+Simulate users with multiple concurrent WebSocket connections:
+
+```javascript
+export default function () {
+  const connections = 3; // Each VU opens 3 connections
+  
+  for (let i = 0; i < connections; i++) {
+    ws.connect('wss://api.example.com/ws', function (socket) {
+      socket.on('open', () => {
+        console.log(`VU ${__VU}, connection ${i}: connected`);
+      });
+      
+      // Keep connection alive for random duration
+      socket.setTimeout(() => {
+        socket.close();
+      }, randomIntBetween(10000, 30000));
+    });
+  }
+}
+```
+
+<Warning>
+Each VU opens separate connections. With 10 VUs and 3 connections each, you'll have 30 total WebSocket connections.
+</Warning>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Handle connection lifecycle properly">
+    Always close connections gracefully:
+    
+    ```javascript
+    socket.setTimeout(() => {
+      // Send goodbye message
+      socket.send(JSON.stringify({ type: 'disconnect' }));
+      
+      // Close connection after a brief delay
+      socket.setTimeout(() => {
+        socket.close();
+      }, 1000);
+    }, sessionDuration);
+    ```
+  </Accordion>
+  
+  <Accordion title="Use realistic message patterns">
+    Match production behavior:
+    
+    ```javascript
+    // Bursty traffic (chat messages)
+    if (Math.random() < 0.1) { // 10% chance per second
+      socket.send(JSON.stringify({ msg: 'Hello!' }));
+    }
+    
+    // Regular heartbeat (IoT devices)
+    socket.setInterval(() => {
+      socket.send(JSON.stringify({ type: 'heartbeat' }));
+    }, 60000); // Every minute
+    ```
+  </Accordion>
+  
+  <Accordion title="Monitor connection health">
+    Track connection status and errors:
+    
+    ```javascript
+    import { Rate } from 'k6/metrics';
+    
+    const connectionErrors = new Rate('ws_connection_errors');
+    
+    socket.on('error', (e) => {
+      connectionErrors.add(1);
+      console.error('Connection error:', e.error());
+    });
+    
+    socket.on('open', () => {
+      connectionErrors.add(0);
+    });
+    ```
+  </Accordion>
+  
+  <Accordion title="Set appropriate thresholds">
+    Define success criteria for WebSocket tests:
+    
+    ```javascript
+    export const options = {
+      thresholds: {
+        'ws_connecting': ['p(95)<1000'],    // 95% connect under 1s
+        'ws_msgs_sent': ['count>1000'],      // At least 1000 messages sent
+        'ws_connection_errors': ['rate<0.1'], // Less than 10% errors
+      },
+    };
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Common Issues
+
+### Connection Refused
+
+If connections fail, verify:
+- URL scheme is `wss://` (secure) or `ws://` (insecure)
+- Server accepts WebSocket upgrade requests
+- Authentication tokens are valid
+- Firewall rules allow WebSocket connections
+
+### High Memory Usage
+
+For long-running tests:
+- Close connections properly
+- Don't accumulate messages in memory
+- Use appropriate VU ramp-down periods
+
+### Timeout Issues
+
+Adjust WebSocket timeout settings:
+
+```javascript
+const params = {
+  tags: { name: 'WebSocketTest' },
+  timeout: '60s', // Increase timeout to 60 seconds
+};
+
+ws.connect(url, params, function (socket) {
+  // ...
+});
+```
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="Custom Metrics" icon="chart-line" href="/guides/custom-metrics">
+    Track WebSocket-specific metrics
+  </Card>
+  
+  <Card title="Test Scenarios" icon="diagram-project" href="/guides/test-scenarios">
+    Create realistic load patterns
+  </Card>
+  
+  <Card title="Data Generation" icon="wand-magic-sparkles" href="/guides/data-generation">
+    Generate realistic message payloads
+  </Card>
+  
+  <Card title="API Reference: k6/ws" icon="book" href="/api-reference/k6-ws">
+    Complete WebSocket API documentation
+  </Card>
+</CardGroup>

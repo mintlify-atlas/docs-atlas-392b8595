@@ -1,0 +1,498 @@
+---
+title: 'k6/execution'
+description: 'Access detailed test execution state and metadata'
+icon: 'gauge-high'
+---
+
+The `k6/execution` module provides detailed information about the current test's execution state, including scenario metadata, VU information, and test control functions.
+
+## Overview
+
+Use this module to:
+- Access scenario and test metadata
+- Get unique identifiers for VUs and iterations
+- Control test execution (abort, fail)
+- Set custom tags and metadata on metrics
+- Retrieve consolidated test options
+
+## Importing the Module
+
+```javascript
+import exec from 'k6/execution';
+```
+
+## API Reference
+
+The `execution` object provides four main property groups:
+
+### instance
+
+Information about the current load generator instance (k6 process).
+
+<ParamField path="instance.iterationsInterrupted" type="number">
+  Number of prematurely interrupted iterations in the current instance.
+</ParamField>
+
+<ParamField path="instance.iterationsCompleted" type="number">
+  Number of completed iterations in the current instance.
+</ParamField>
+
+<ParamField path="instance.vusActive" type="number">
+  Number of currently active VUs.
+</ParamField>
+
+<ParamField path="instance.vusInitialized" type="number">
+  Number of currently initialized VUs.
+</ParamField>
+
+<ParamField path="instance.currentTestRunDuration" type="number">
+  Time elapsed since the start of the current test run (milliseconds).
+</ParamField>
+
+### scenario
+
+Metadata and execution details about the current running scenario.
+
+<ParamField path="scenario.name" type="string">
+  The assigned name of the running scenario.
+</ParamField>
+
+<ParamField path="scenario.executor" type="string">
+  The name of the running executor type (e.g., `"shared-iterations"`, `"ramping-vus"`).
+</ParamField>
+
+<ParamField path="scenario.startTime" type="number">
+  Unix timestamp (milliseconds) when the scenario started.
+</ParamField>
+
+<ParamField path="scenario.progress" type="number">
+  Scenario progress as a float between 0 and 1.
+</ParamField>
+
+<ParamField path="scenario.iterationInInstance" type="number">
+  Unique zero-based sequential number of the current iteration in the scenario, across the current instance.
+</ParamField>
+
+<ParamField path="scenario.iterationInTest" type="number">
+  Unique zero-based sequential number of the current iteration in the scenario, across all k6 instances (local, cloud, distributed).
+</ParamField>
+
+### test
+
+Control functions and test-wide information.
+
+<ResponseField name="test.abort([message])" type="function">
+  Aborts the test run with exit code `108`. Optionally provide an error message.
+  
+  **Parameters:**
+  <ParamField path="message" type="string">
+    Optional error message to log
+  </ParamField>
+  
+  <Note>
+  Aborting does **not** prevent `teardown()` from running.
+  </Note>
+</ResponseField>
+
+<ResponseField name="test.fail([message])" type="function">
+  Marks the test run as failed with exit code `110`. Does not interrupt test execution - all iterations finish normally.
+  
+  **Parameters:**
+  <ParamField path="message" type="string">
+    Optional failure message to log
+  </ParamField>
+</ResponseField>
+
+<ParamField path="test.options" type="object">
+  Returns an object with all consolidated test options following the order of precedence. Properties where no option is defined return `null`.
+</ParamField>
+
+### vu
+
+Metadata and execution details about the current VU.
+
+<ParamField path="vu.iterationInInstance" type="number">
+  Iteration identifier for this VU in the current instance. Only unique for this VU and instance.
+</ParamField>
+
+<ParamField path="vu.iterationInScenario" type="number">
+  Iteration identifier for this VU in the current scenario. Only unique for this VU and scenario.
+</ParamField>
+
+<ParamField path="vu.idInInstance" type="number">
+  VU identifier across the instance. Not unique across multiple instances.
+</ParamField>
+
+<ParamField path="vu.idInTest" type="number">
+  Globally unique VU identifier across the entire test run.
+</ParamField>
+
+<ParamField path="vu.metrics.tags" type="object">
+  Map for controlling VU-level tags. Tags are included in every metric emitted by this VU and maintained across iterations.
+</ParamField>
+
+<ParamField path="vu.metrics.metadata" type="object">
+  Map for controlling VU-level metadata. Metadata is included in every metric emitted by this VU and maintained across iterations.
+</ParamField>
+
+<Note>
+**Unique Identifiers:** All unique identifiers are sequentially generated starting from zero (iterations) or one (VU IDs). In distributed/cloud tests, identifiers remain unique across instances, though gaps may exist due to different execution speeds.
+</Note>
+
+## Examples
+
+### Basic Scenario Information
+
+<CodeGroup>
+```javascript Scenario Metadata
+import exec from 'k6/execution';
+
+export const options = {
+  scenarios: {
+    myscenario: {
+      executor: 'shared-iterations',
+      maxDuration: '30m',
+    },
+  },
+};
+
+export default function () {
+  console.log(exec.scenario.name); // "myscenario"
+  console.log(exec.scenario.executor); // "shared-iterations"
+  console.log(exec.scenario.progress); // 0.0 to 1.0
+}
+```
+
+```javascript VU and Iteration Info
+import exec from 'k6/execution';
+
+export default function () {
+  console.log(`VU ID (test-wide): ${exec.vu.idInTest}`);
+  console.log(`VU ID (instance): ${exec.vu.idInInstance}`);
+  console.log(`Iteration (scenario): ${exec.scenario.iterationInTest}`);
+  console.log(`Iteration (VU): ${exec.vu.iterationInScenario}`);
+}
+```
+</CodeGroup>
+
+### Getting Unique Data
+
+Use iteration identifiers for data parameterization:
+
+```javascript
+import { SharedArray } from 'k6/data';
+import exec from 'k6/execution';
+import http from 'k6/http';
+
+const users = new SharedArray('users', () => {
+  return JSON.parse(open('./users.json'));
+});
+
+export default function () {
+  // Each iteration gets a unique user
+  const user = users[exec.scenario.iterationInTest % users.length];
+  
+  http.post('https://test.k6.io/login', {
+    username: user.username,
+    password: user.password,
+  });
+}
+```
+
+### Timing Operations
+
+```javascript
+import exec from 'k6/execution';
+import http from 'k6/http';
+
+export default function () {
+  // Measure time since scenario start
+  const startTime = new Date(exec.scenario.startTime);
+  const elapsed = new Date() - startTime;
+  
+  http.get('https://test.k6.io');
+  console.log(`Step 1: scenario ran for ${elapsed}ms`);
+  
+  http.get('https://test.k6.io/news.php');
+  const elapsed2 = new Date() - startTime;
+  console.log(`Step 2: scenario ran for ${elapsed2}ms`);
+}
+```
+
+### Conditional Logic by Scenario
+
+```javascript
+import exec from 'k6/execution';
+import http from 'k6/http';
+
+export const options = {
+  scenarios: {
+    'smoke-test': {
+      executor: 'constant-vus',
+      vus: 1,
+      duration: '1m',
+    },
+    'load-test': {
+      executor: 'ramping-vus',
+      startVUs: 0,
+      stages: [
+        { duration: '5m', target: 100 },
+        { duration: '10m', target: 100 },
+        { duration: '5m', target: 0 },
+      ],
+    },
+  },
+};
+
+export default function () {
+  if (exec.scenario.name === 'smoke-test') {
+    // Run basic health checks
+    http.get('https://test.k6.io/health');
+  } else {
+    // Run full user journey
+    http.get('https://test.k6.io');
+    http.post('https://test.k6.io/login', { /* ... */ });
+    http.get('https://test.k6.io/dashboard');
+  }
+}
+```
+
+### Test Abort
+
+```javascript
+import exec from 'k6/execution';
+import http from 'k6/http';
+
+export default function () {
+  const res = http.get('https://test.k6.io/health');
+  
+  // Abort test if health check fails
+  if (res.status !== 200) {
+    exec.test.abort('Health check failed - aborting test');
+  }
+  
+  // Continue with test logic
+  http.get('https://test.k6.io');
+}
+
+export function teardown() {
+  console.log('Teardown still runs after test.abort()');
+}
+```
+
+### Test Fail
+
+```javascript
+import http from 'k6/http';
+import exec from 'k6/execution';
+
+export const options = {
+  iterations: 10,
+};
+
+export default function () {
+  http.get('https://quickpizza.grafana.com');
+
+  // Mark test as failed on iteration 3 but continue running
+  if (exec.vu.iterationInInstance === 3) {
+    exec.test.fail(`iteration ${exec.vu.iterationInInstance}: marked the test as failed`);
+  }
+
+  console.log(`iteration ${exec.vu.iterationInInstance} executed`);
+}
+```
+
+### Getting Test Options
+
+```javascript
+import exec from 'k6/execution';
+
+export const options = {
+  stages: [
+    { duration: '5s', target: 100 },
+    { duration: '5s', target: 50 },
+  ],
+};
+
+export default function () {
+  console.log(exec.test.options.paused); // null
+  console.log(exec.test.options.scenarios.default.stages[0].target); // 100
+  console.log(exec.test.options.stages[1].target); // 50
+}
+```
+
+### Custom Tags
+
+```javascript
+import http from 'k6/http';
+import exec from 'k6/execution';
+
+export default function () {
+  // Set custom tags for this VU
+  exec.vu.metrics.tags['mytag'] = 'value1';
+  exec.vu.metrics.tags['mytag2'] = 2;
+  exec.vu.metrics.tags['user_type'] = __VU % 2 === 0 ? 'premium' : 'free';
+
+  // These HTTP requests will be tagged with mytag, mytag2, and user_type
+  http.batch([
+    'https://test.k6.io',
+    'https://quickpizza.grafana.com'
+  ]);
+}
+```
+
+<Warning>
+**System Tag Override:** Setting a tag with the same key as a system tag is allowed but requires caution. Most system tags (like `url`) won't actually change their value for HTTP requests since they're determined by the request itself. However, setting the `name` tag works as expected for URL grouping.
+</Warning>
+
+### Custom Metadata
+
+```javascript
+import http from 'k6/http';
+import exec from 'k6/execution';
+
+export default function () {
+  // Set high-cardinality metadata (like trace IDs)
+  exec.vu.metrics.metadata['trace_id'] = `trace-${Date.now()}-${__VU}`;
+  exec.vu.metrics.metadata['user_id'] = `user-${exec.vu.idInTest}`;
+
+  // Metrics from these requests include the metadata
+  http.batch(['https://test.k6.io', 'https://quickpizza.grafana.com']);
+
+  // Unset metadata
+  delete exec.vu.metrics.metadata['trace_id'];
+  
+  // These requests won't have trace_id metadata
+  http.batch(['https://test.k6.io', 'https://quickpizza.grafana.com']);
+}
+```
+
+### Unique Data Distribution
+
+```javascript
+import { SharedArray } from 'k6/data';
+import exec from 'k6/execution';
+import http from 'k6/http';
+
+const products = new SharedArray('products', () => {
+  return JSON.parse(open('./products.json'));
+});
+
+export const options = {
+  scenarios: {
+    purchase: {
+      executor: 'per-vu-iterations',
+      vus: 10,
+      iterations: 100,
+    },
+  },
+};
+
+export default function () {
+  // Ensure each iteration tests a unique product
+  const productIndex = exec.scenario.iterationInTest % products.length;
+  const product = products[productIndex];
+  
+  http.post('https://api.example.com/purchase', {
+    product_id: product.id,
+    quantity: 1,
+  });
+  
+  console.log(`VU ${exec.vu.idInTest}, Iteration ${exec.vu.iterationInScenario}: Purchased ${product.name}`);
+}
+```
+
+## Tag and Metadata Types
+
+### Supported Tag Types
+
+k6 supports the following types as tag values:
+- Strings
+- Numbers
+- Booleans
+
+All values are implicitly converted to strings. Objects and arrays are **not** allowed.
+
+```javascript
+// Valid
+exec.vu.metrics.tags['string_tag'] = 'value';
+exec.vu.metrics.tags['number_tag'] = 42;
+exec.vu.metrics.tags['bool_tag'] = true;
+
+// Invalid (will warn or throw if 'throw' option is set)
+exec.vu.metrics.tags['object_tag'] = { key: 'value' }; // ❌
+exec.vu.metrics.tags['array_tag'] = [1, 2, 3]; // ❌
+```
+
+### Tags vs Metadata
+
+| Aspect | Tags | Metadata |
+|--------|------|----------|
+| **Cardinality** | Low (for grouping/filtering) | High (unique IDs, traces) |
+| **Thresholds** | Can be used | Cannot be used |
+| **Filtering** | Standard metric filtering | Output-specific handling |
+| **Use Case** | Environment, test type, region | Trace IDs, user IDs, request IDs |
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use iterationInTest for Unique Data">
+    Use `exec.scenario.iterationInTest` or `exec.vu.idInTest` to distribute unique data across all VUs and instances:
+    
+    ```javascript
+    const user = users[exec.scenario.iterationInTest % users.length];
+    ```
+  </Accordion>
+  
+  <Accordion title="Avoid Overriding System Tags">
+    Be careful when setting custom tags that match system tag names. Most won't behave as expected:
+    
+    ```javascript
+    // ❌ Won't actually change the URL tag on http.get()
+    exec.vu.metrics.tags['url'] = 'custom';
+    
+    // ✅ 'name' tag works for URL grouping
+    exec.vu.metrics.tags['name'] = 'api_call';
+    ```
+  </Accordion>
+  
+  <Accordion title="Use Metadata for High-Cardinality Data">
+    Use metadata instead of tags for high-cardinality data to avoid metric explosion:
+    
+    ```javascript
+    // ✅ Good: High-cardinality data
+    exec.vu.metrics.metadata['trace_id'] = uniqueTraceId;
+    
+    // ❌ Bad: Creates too many tag combinations
+    exec.vu.metrics.tags['trace_id'] = uniqueTraceId;
+    ```
+  </Accordion>
+  
+  <Accordion title="Clean Up Resources on Abort">
+    Always use `teardown()` for cleanup, as it runs even after `test.abort()`:
+    
+    ```javascript
+    export function teardown(data) {
+      // Clean up test data, close connections, etc.
+      // This runs even if test.abort() was called
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="Init Context" icon="rocket" href="/api/init-context">
+    Global variables and initialization
+  </Card>
+  <Card title="Scenarios" icon="diagram-project" href="/guides/scenarios">
+    Configure test scenarios
+  </Card>
+  <Card title="Tags and Groups" icon="tags" href="/guides/tags-and-groups">
+    Organize and filter metrics
+  </Card>
+  <Card title="Test Lifecycle" icon="arrows-rotate" href="/guides/test-lifecycle">
+    Understanding k6 execution phases
+  </Card>
+</CardGroup>

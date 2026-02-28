@@ -1,0 +1,215 @@
+---
+title: k6
+description: Core k6 module with test utilities and assertion functions
+---
+
+The k6 module contains k6-specific functionality for writing load tests. This is the core module that provides essential functions like checks, groups, and sleep.
+
+## Import
+
+```javascript
+import { check, fail, group, sleep, randomSeed } from 'k6';
+```
+
+## Functions
+
+### check()
+
+Runs one or more checks on a value and generates a pass/fail result but does not throw errors or interrupt execution upon failure.
+
+<ParamField path="val" type="any" required>
+  Value to test.
+</ParamField>
+
+<ParamField path="sets" type="object" required>
+  Tests (checks) to run on the value. Each key is a description, and each value is a function that returns a boolean.
+</ParamField>
+
+<ParamField path="tags" type="object">
+  Extra tags to attach to metrics emitted.
+</ParamField>
+
+<ResponseField name="return" type="boolean">
+  Returns `true` if all checks have succeeded, `false` otherwise.
+</ResponseField>
+
+<CodeGroup>
+```javascript Basic check
+import http from 'k6/http';
+import { check } from 'k6';
+
+export default function () {
+  const res = http.get('https://quickpizza.grafana.com/');
+  check(res, {
+    'response code was 200': (res) => res.status == 200,
+  });
+}
+```
+
+```javascript Multiple checks with tags
+import http from 'k6/http';
+import { check, fail } from 'k6';
+
+export default function () {
+  const res = http.get('https://quickpizza.grafana.com/');
+  const checkOutput = check(
+    res,
+    {
+      'response code was 200': (res) => res.status == 200,
+      'body size was larger than 123 bytes': (res) => res.body.length > 123,
+    },
+    { myTag: "I'm a tag" }
+  );
+
+  if (!checkOutput) {
+    fail('unexpected response');
+  }
+}
+```
+</CodeGroup>
+
+<Note>
+Checks are not asserts. A failed assertion throws an error, while a check always returns with a pass or failure. Use thresholds to control failure conditions.
+</Note>
+
+---
+
+### fail()
+
+Immediately throws an error, aborting the current VU script iteration.
+
+<ParamField path="err" type="string">
+  Error message that gets printed to stderr.
+</ParamField>
+
+```javascript
+import http from 'k6/http';
+import { check, fail } from 'k6';
+
+export default function () {
+  const res = http.get('https://k6.io');
+  if (
+    !check(res, {
+      'status code MUST be 200': (res) => res.status == 200,
+    })
+  ) {
+    fail('status code was *not* 200');
+  }
+}
+```
+
+<Note>
+`fail()` does not abort the test or exit with non-0 status. It only aborts the current iteration. To halt test execution, use `test.abort()` from k6/execution.
+</Note>
+
+---
+
+### group()
+
+Runs code inside a group. Groups organize results in a test and tag metrics accordingly.
+
+<ParamField path="name" type="string" required>
+  Name of the group.
+</ParamField>
+
+<ParamField path="fn" type="function" required>
+  Group body - code to be executed in the group context.
+</ParamField>
+
+<ResponseField name="return" type="any">
+  The return value of the function.
+</ResponseField>
+
+```javascript
+import { group } from 'k6';
+
+export default function () {
+  group('visit product listing page', function () {
+    // ...
+  });
+  group('add several products to the shopping cart', function () {
+    // ...
+  });
+  group('visit login page', function () {
+    // ...
+  });
+  group('authenticate', function () {
+    // ...
+  });
+  group('checkout process', function () {
+    // ...
+  });
+}
+```
+
+<Warning>
+Avoid using `group` with async functions or asynchronous code. k6 might apply tags in an unreliable or unintuitive way with promises or await.
+</Warning>
+
+---
+
+### sleep()
+
+Suspends VU execution for the specified duration.
+
+<ParamField path="t" type="number" required>
+  Duration, in seconds.
+</ParamField>
+
+<CodeGroup>
+```javascript Random sleep
+import { sleep } from 'k6';
+import http from 'k6/http';
+
+export default function () {
+  http.get('https://k6.io');
+  sleep(Math.random() * 30);
+  http.get('https://k6.io/features');
+}
+```
+
+```javascript Sleep with range
+import { sleep } from 'k6';
+import http from 'k6/http';
+import { randomIntBetween } from 'https://jslib.k6.io/k6-utils/1.2.0/index.js';
+
+export default function () {
+  http.get('https://k6.io');
+  sleep(randomIntBetween(20, 30));
+  http.get('https://k6.io/features');
+}
+```
+</CodeGroup>
+
+<Warning>
+Don't use `sleep` with async code like promises or event handlers. `sleep` blocks VU execution and prevents the event loop from processing. Use `setTimeout` from k6/timers for async code instead.
+</Warning>
+
+---
+
+### randomSeed()
+
+Sets seed to get a reproducible pseudo-random number using `Math.random`.
+
+<ParamField path="int" type="integer" required>
+  The seed value.
+</ParamField>
+
+```javascript
+import { randomSeed } from 'k6';
+
+export const options = {
+  vus: 10,
+  duration: '5s',
+};
+
+export default function () {
+  randomSeed(123456789);
+  const rnd = Math.random();
+  console.log(rnd);
+}
+```
+
+<Info>
+Using the same seed value across iterations produces the same sequence of random numbers.
+</Info>

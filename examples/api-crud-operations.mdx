@@ -1,0 +1,403 @@
+---
+title: 'API CRUD Operations'
+description: 'Complete example of testing REST API Create, Read, Update, and Delete operations with k6'
+icon: 'database'
+---
+
+Test REST API CRUD operations (Create, Read, Update, Delete) with complete request flows and authentication.
+
+## Understanding CRUD
+
+CRUD operations map to HTTP methods:
+
+- **Create**: `POST` - Create a new resource
+- **Read**: `GET` - Retrieve a resource
+- **Update**: `PUT` or `PATCH` - Modify an existing resource
+- **Delete**: `DELETE` - Remove a resource
+
+## Test Workflow
+
+This example tests the QuickPizza API with a complete CRUD flow:
+
+1. **Setup**: Create a user and retrieve an authentication token
+2. **Create**: Post a new pizza rating
+3. **Read**: Fetch the list of ratings
+4. **Update**: Modify the rating (change stars)
+5. **Delete**: Remove the rating
+
+## Core k6 API Example
+
+Using standard k6 HTTP and check APIs:
+
+```javascript
+import http from 'k6/http';
+import { check, group } from 'k6';
+
+export const options = {
+  vus: 1,
+  iterations: 1,
+};
+
+// Create a random string of given length
+function randomString(length, charset = '') {
+  if (!charset) charset = 'abcdefghijklmnopqrstuvwxyz';
+  let res = '';
+  while (length--) res += charset[(Math.random() * charset.length) | 0];
+  return res;
+}
+
+const USERNAME = `${randomString(10)}@example.com`;
+const PASSWORD = 'secret';
+const BASE_URL = 'https://quickpizza.grafana.com';
+
+// Register a new user and retrieve authentication token
+export function setup() {
+  const res = http.post(
+    `${BASE_URL}/api/users`,
+    JSON.stringify({
+      username: USERNAME,
+      password: PASSWORD,
+    })
+  );
+
+  check(res, { 'created user': (r) => r.status === 201 });
+
+  const loginRes = http.post(
+    `${BASE_URL}/api/users/token/login`,
+    JSON.stringify({
+      username: USERNAME,
+      password: PASSWORD,
+    })
+  );
+
+  const authToken = loginRes.json('token');
+  check(authToken, { 'logged in successfully': () => authToken.length > 0 });
+
+  return authToken;
+}
+
+export default function (authToken) {
+  // Set authorization header for all requests
+  const requestConfigWithTag = (tag) => ({
+    headers: {
+      Authorization: `Bearer ${authToken}`,
+    },
+    tags: Object.assign(
+      {},
+      {
+        name: 'PrivateRatings',
+      },
+      tag
+    ),
+  });
+
+  let URL = `${BASE_URL}/api/ratings`;
+
+  group('01. Create a new rating', () => {
+    const payload = {
+      stars: 2,
+      pizza_id: 1, // Pizza ID 1 already exists in the database
+    };
+
+    const res = http.post(URL, JSON.stringify(payload), requestConfigWithTag({ name: 'Create' }));
+
+    if (check(res, { 'Rating created correctly': (r) => r.status === 201 })) {
+      URL = `${URL}/${res.json('id')}`;
+    } else {
+      console.log(`Unable to create rating ${res.status} ${res.body}`);
+      return;
+    }
+  });
+
+  group('02. Fetch my ratings', () => {
+    const res = http.get(`${BASE_URL}/api/ratings`, requestConfigWithTag({ name: 'Fetch' }));
+    check(res, { 'retrieve ratings status': (r) => r.status === 200 });
+    check(res.json(), { 'retrieved ratings list': (r) => r.ratings.length > 0 });
+  });
+
+  group('03. Update the rating', () => {
+    const payload = { stars: 5 };
+    const res = http.put(URL, JSON.stringify(payload), requestConfigWithTag({ name: 'Update' }));
+    const isSuccessfulUpdate = check(res, {
+      'Update worked': () => res.status === 200,
+      'Updated stars number is correct': () => res.json('stars') === 5,
+    });
+
+    if (!isSuccessfulUpdate) {
+      console.log(`Unable to update the rating ${res.status} ${res.body}`);
+      return;
+    }
+  });
+
+  group('04. Delete the rating', () => {
+    const delRes = http.del(URL, null, requestConfigWithTag({ name: 'Delete' }));
+
+    const isSuccessfulDelete = check(null, {
+      'Rating was deleted correctly': () => delRes.status === 204,
+    });
+
+    if (!isSuccessfulDelete) {
+      console.log('Rating was not deleted properly');
+      return;
+    }
+  });
+}
+```
+
+## Modern API Example (httpx + k6chaijs)
+
+Using the newer `httpx` and `k6chaijs` libraries for a more expressive syntax:
+
+```javascript
+import { describe, expect } from 'https://jslib.k6.io/k6chaijs/4.3.4.3/index.js';
+import { Httpx } from 'https://jslib.k6.io/httpx/0.1.0/index.js';
+import {
+  randomIntBetween,
+  randomString,
+} from 'https://jslib.k6.io/k6-utils/1.2.0/index.js';
+
+export const options = {
+  vus: 1,
+  iterations: 1,
+};
+
+const USERNAME = `user${randomIntBetween(1, 100000)}@example.com`;
+const PASSWORD = 'secret';
+
+const session = new Httpx({ baseURL: 'https://quickpizza.grafana.com' });
+
+// Register a new user and retrieve authentication token
+export function setup() {
+  let authToken = null;
+
+  describe(`setup - create a test user ${USERNAME}`, () => {
+    const resp = session.post(
+      `/api/users`,
+      JSON.stringify({
+        username: USERNAME,
+        password: PASSWORD,
+      })
+    );
+
+    expect(resp.status, 'User create status').to.equal(201);
+    expect(resp, 'User create valid json response').to.have.validJsonBody();
+  });
+
+  describe(`setup - Authenticate the new user ${USERNAME}`, () => {
+    const resp = session.post(
+      `/api/users/token/login`,
+      JSON.stringify({
+        username: USERNAME,
+        password: PASSWORD,
+      })
+    );
+
+    expect(resp.status, 'Authenticate status').to.equal(200);
+    expect(resp, 'Authenticate valid json response').to.have.validJsonBody();
+    authToken = resp.json('token');
+    expect(authToken, 'Authentication token').to.be.a('string');
+  });
+
+  return authToken;
+}
+
+export default function (authToken) {
+  // Set authorization header on the session
+  session.addHeader('Authorization', `Bearer ${authToken}`);
+
+  describe('01. Create a new rating', (t) => {
+    const payload = {
+      stars: 2,
+      pizza_id: 1, // Pizza ID 1 already exists in the database
+    };
+
+    session.addTag('name', 'Create');
+    const resp = session.post(`/api/ratings`, JSON.stringify(payload));
+
+    expect(resp.status, 'Rating creation status').to.equal(201);
+    expect(resp, 'Rating creation valid json response').to.have.validJsonBody();
+
+    session.newRatingId = resp.json('id');
+  });
+
+  describe('02. Fetch my ratings', (t) => {
+    session.clearTag('name');
+    const resp = session.get('/api/ratings');
+
+    expect(resp.status, 'Fetch ratings status').to.equal(200);
+    expect(resp, 'Fetch ratings valid json response').to.have.validJsonBody();
+    expect(resp.json('ratings').length, 'Number of ratings').to.be.above(0);
+  });
+
+  describe('03. Update the rating', (t) => {
+    const payload = {
+      stars: 5,
+    };
+
+    const resp = session.patch(`/api/ratings/${session.newRatingId}`, JSON.stringify(payload));
+
+    expect(resp.status, 'Rating patch status').to.equal(200);
+    expect(resp, 'Fetch rating valid json response').to.have.validJsonBody();
+    expect(resp.json('stars'), 'Stars').to.equal(payload.stars);
+
+    // Read rating again to verify the update worked
+    const resp1 = session.get(`/api/ratings/${session.newRatingId}`);
+
+    expect(resp1.status, 'Fetch rating status').to.equal(200);
+    expect(resp1, 'Fetch rating valid json response').to.have.validJsonBody();
+    expect(resp1.json('stars'), 'Stars').to.equal(payload.stars);
+  });
+
+  describe('04. Delete the rating', (t) => {
+    const resp = session.delete(`/api/ratings/${session.newRatingId}`);
+
+    expect(resp.status, 'Rating delete status').to.equal(204);
+  });
+}
+```
+
+<Note>
+The `httpx` session automatically handles the base URL and maintains headers across requests, making your test code cleaner.
+</Note>
+
+## Running the Test
+
+<Tabs>
+  <Tab title="Basic Run">
+    ```sh
+    k6 run api-crud-test.js
+    ```
+  </Tab>
+  
+  <Tab title="Load Test">
+    Increase virtual users and duration:
+    
+    ```sh
+    k6 run --vus 10 --duration 30s api-crud-test.js
+    ```
+  </Tab>
+  
+  <Tab title="Cloud Run">
+    Run in Grafana Cloud k6:
+    
+    ```sh
+    k6 cloud api-crud-test.js
+    ```
+  </Tab>
+</Tabs>
+
+## Key Concepts
+
+### Groups
+
+Organize related requests and view grouped metrics:
+
+```javascript
+group('User Registration', () => {
+  // Multiple related requests
+  const res1 = http.post('/api/register', data);
+  const res2 = http.post('/api/verify', verifyData);
+});
+```
+
+### Checks vs Thresholds
+
+**Checks** validate individual responses but don't fail the test:
+
+```javascript
+check(res, { 'status is 200': (r) => r.status === 200 });
+```
+
+**Thresholds** define pass/fail criteria for the entire test:
+
+```javascript
+export const options = {
+  thresholds: {
+    'http_req_duration': ['p(95)<500'], // 95% of requests under 500ms
+    'checks': ['rate>0.9'],             // 90% of checks pass
+  },
+};
+```
+
+### Tags
+
+Add custom tags to filter and analyze metrics:
+
+```javascript
+const params = {
+  tags: {
+    name: 'CreateRating',
+    api_version: 'v2',
+  },
+};
+
+http.post(url, data, params);
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use setup() for test data preparation">
+    Avoid creating test data in every VU iteration. Use the `setup()` function to create shared data once:
+    
+    ```javascript
+    export function setup() {
+      // Create user once, return credentials
+      return { token: 'auth-token' };
+    }
+    
+    export default function(data) {
+      // Use shared token in all VU iterations
+      http.get(url, { headers: { Authorization: data.token } });
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Check responses before using data">
+    Always validate responses before extracting data:
+    
+    ```javascript
+    const res = http.post(url, data);
+    
+    if (check(res, { 'created': (r) => r.status === 201 })) {
+      const id = res.json('id');
+      // Continue with id
+    } else {
+      console.log(`Failed: ${res.status} ${res.body}`);
+      return; // Exit early
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Clean up resources in teardown()">
+    Remove test data after the test completes:
+    
+    ```javascript
+    export function teardown(data) {
+      http.del(`https://api.example.com/users/${data.userId}`, {
+        headers: { Authorization: `Bearer ${data.token}` },
+      });
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="HTTP Authentication" icon="shield-check" href="/examples/http-authentication">
+    Learn about authentication methods
+  </Card>
+  
+  <Card title="Correlation & Dynamic Data" icon="link" href="/examples/correlation-and-dynamic-data">
+    Extract and reuse response data
+  </Card>
+  
+  <Card title="Test Lifecycle" icon="rotate" href="/guides/test-lifecycle">
+    Understand setup, VU, and teardown stages
+  </Card>
+  
+  <Card title="Checks & Thresholds" icon="circle-check" href="/guides/checks-and-thresholds">
+    Define pass/fail criteria
+  </Card>
+</CardGroup>

@@ -1,0 +1,529 @@
+---
+title: 'Browser Testing Best Practices'
+description: 'Learn recommended practices and patterns for reliable, maintainable k6 browser tests'
+---
+
+# Browser Testing Best Practices
+
+This guide presents recommended practices and patterns for working with the k6 browser module to create reliable, maintainable tests.
+
+## Always Close Pages
+
+Always call `page.close()` at the end of your browser tests to ensure accurate metric collection and proper resource cleanup.
+
+### Why Close Pages?
+
+- Ensures accurate and complete metric collection
+- Cleans up event listeners to prevent resource leaks
+- Simplifies test teardown for improved reliability
+- Allows proper calculation of Web Vital metrics
+
+### Implementation Pattern
+
+Use a `try`/`finally` block to guarantee page closure:
+
+```javascript
+import { browser } from 'k6/browser';
+import { check } from 'k6';
+
+const BASE_URL = __ENV.BASE_URL || 'https://quickpizza.grafana.com/';
+
+export const options = {
+  scenarios: {
+    ui: {
+      executor: 'shared-iterations',
+      options: {
+        browser: {
+          type: 'chromium',
+        },
+      },
+    },
+  },
+};
+
+export default async function () {
+  let checkData;
+  const page = await browser.newPage();
+  
+  try {
+    await page.goto(BASE_URL);
+    
+    checkData = await page.locator('h1').textContent();
+    check(page, {
+      header: checkData == 'Looking to break out of your pizza routine?',
+    });
+
+    await page.locator('//button[. = "Pizza, Please!"]').click();
+    await page.waitForTimeout(500);
+    
+    await page.screenshot({ path: 'screenshot.png' });
+    
+    checkData = await page.locator('div#recommendations').textContent();
+    check(page, {
+      recommendation: checkData != '',
+    });
+  } finally {
+    // Always close the page at the end
+    await page.close();
+  }
+}
+```
+
+## Choose Robust Selectors
+
+Selectors should not be tightly coupled to styling or implementation details. Use user-facing attributes that are unlikely to change.
+
+### Selector Priority Guide
+
+<Steps>
+
+### Best: User-Facing Attributes
+
+Use ARIA labels and custom data attributes:
+
+```javascript
+// Excellent - ARIA labels rarely change
+page.locator('[aria-label="Login"]')
+
+// Excellent - custom data attributes
+page.locator('[data-test="login"]')
+page.locator('[data-testid="submit-button"]')
+```
+
+### Good: Text Content
+
+Use XPath for text-based selection:
+
+```javascript
+// Good - text content is stable
+page.locator('//button[text()="Submit"]')
+page.locator('//a[contains(text(), "Learn More")]')
+```
+
+### Use Sparingly: IDs
+
+Only use IDs if they don't change:
+
+```javascript
+// OK if ID is stable
+page.locator('#login-btn')
+```
+
+### Avoid: Class Names
+
+Class names can be duplicated and change frequently:
+
+```javascript
+// Avoid - class names change often
+page.locator('.login-btn')
+```
+
+### Never: Generic Elements or Absolute Paths
+
+These are brittle and provide no context:
+
+```javascript
+// Never - no context
+page.locator('button')
+
+// Never - tightly coupled to DOM structure
+page.locator('/html[1]/body[1]/main[1]/div[2]/button[1]')
+```
+
+</Steps>
+
+### Selector Comparison Table
+
+| Selector | Recommended | Reason |
+|----------|-------------|--------|
+| `[aria-label="Login"]` | ✅ Best | User-facing, rarely changes |
+| `[data-test="login"]` | ✅ Best | Designed for testing |
+| `//button[text()="Submit"]` | ✅ Good | Text content is stable |
+| `#login-btn` | ⚠️ OK | Only if ID is stable |
+| `.login-btn` | ⚠️ Sparingly | Can be duplicated |
+| `button` | ❌ Avoid | No context |
+| `/html[1]/body[1]/main[1]` | ❌ Never | Brittle, tightly coupled |
+
+## Hybrid Performance Testing
+
+Combine a small number of browser VUs with many protocol-level VUs for efficient, comprehensive testing.
+
+### Why Hybrid Testing?
+
+- Less resource-intensive than pure browser testing
+- Tests real user flows on frontend while generating higher load on backend
+- Measures both backend and frontend performance in one execution
+- Increases collaboration between teams
+
+<Note>
+Keep in mind that browser VUs have additional performance overhead. Resource usage depends on the system under test.
+</Note>
+
+### Implementation Example
+
+```javascript
+import { browser } from 'k6/browser';
+import { check } from 'k6';
+import http from 'k6/http';
+
+const BASE_URL = __ENV.BASE_URL || 'https://quickpizza.grafana.com';
+
+export const options = {
+  scenarios: {
+    // Protocol-level load test (90% of traffic)
+    load: {
+      exec: 'getPizza',
+      executor: 'ramping-vus',
+      stages: [
+        { duration: '5s', target: 5 },
+        { duration: '10s', target: 5 },
+        { duration: '5s', target: 0 },
+      ],
+      startTime: '10s',
+    },
+    // Browser-level test (10% of traffic)
+    browser: {
+      exec: 'checkFrontend',
+      executor: 'constant-vus',
+      vus: 1,
+      duration: '30s',
+      options: {
+        browser: {
+          type: 'chromium',
+        },
+      },
+    },
+  },
+  thresholds: {
+    http_req_failed: ['rate<0.01'],
+    http_req_duration: ['p(95)<500', 'p(99)<1000'],
+    browser_web_vital_fcp: ['p(95) < 1000'],
+    browser_web_vital_lcp: ['p(95) < 2000'],
+  },
+};
+
+export function getPizza() {
+  const restrictions = {
+    maxCaloriesPerSlice: 500,
+    mustBeVegetarian: false,
+    excludedIngredients: ['pepperoni'],
+    excludedTools: ['knife'],
+    maxNumberOfToppings: 6,
+    minNumberOfToppings: 2,
+  };
+
+  const res = http.post(`${BASE_URL}/api/pizza`, JSON.stringify(restrictions), {
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'token abcdef0123456789',
+    },
+  });
+
+  check(res, {
+    'status is 200': (res) => res.status === 200,
+  });
+}
+
+export async function checkFrontend() {
+  const page = await browser.newPage();
+
+  try {
+    await page.goto(BASE_URL);
+
+    check(page.locator('h1'), {
+      header: async (lo) =>
+        (await lo.textContent()) == 'Looking to break out of your pizza routine?',
+    });
+
+    await page.locator('//button[. = "Pizza, Please!"]').click();
+    await page.waitForTimeout(500);
+    
+    await page.screenshot({ path: `screenshots/${__ITER}.png` });
+
+    check(page.locator('div#recommendations'), {
+      recommendation: async (lo) => (await lo.textContent()) != '',
+    });
+  } finally {
+    await page.close();
+  }
+}
+```
+
+### Hybrid Testing Recommendations
+
+<Tip>
+**Start small** - Begin with 10% or fewer browser VUs to monitor user experience while 90% of traffic comes from protocol level.
+</Tip>
+
+<Tip>
+**Experiment with load patterns** - Combine browser tests with different load testing types to understand the impact on end-user experience.
+</Tip>
+
+<Tip>
+**Focus on high-risk journeys** - Identify critical user journeys first to monitor Web Vitals during high traffic or service faults.
+</Tip>
+
+## Use Page Object Model
+
+For large test suites, implement the page object model pattern to improve maintainability and reduce code duplication.
+
+### Benefits
+
+- Encapsulates UI structure details in one place
+- Makes tests easier to read and maintain
+- Reduces code duplication across tests
+- Isolates changes to specific pages
+
+### Example Implementation
+
+Create a page object class:
+
+```javascript
+// pages/homepage.js
+import { bookingData } from '../data/booking-data.js';
+
+export class Homepage {
+  constructor(page) {
+    this.page = page;
+    this.nameField = page.locator('[data-testid="ContactName"]');
+    this.emailField = page.locator('[data-testid="ContactEmail"]');
+    this.phoneField = page.locator('[data-testid="ContactPhone"]');
+    this.subjectField = page.locator('[data-testid="ContactSubject"]');
+    this.descField = page.locator('[data-testid="ContactDescription"]');
+    this.submitButton = page.locator('#submitContact');
+    this.verificationMessage = page.locator('.row.contact h2');
+  }
+
+  async goto() {
+    await this.page.goto('https://myexamplewebsite/');
+  }
+
+  async submitForm() {
+    const { name, email, phone, subject, description } = bookingData;
+
+    await this.nameField.type(name);
+    await this.emailField.type(email);
+    await this.phoneField.type(phone);
+    await this.subjectField.type(subject);
+    await this.descField.type(description);
+    await this.submitButton.click();
+  }
+
+  async getVerificationMessage() {
+    return await this.verificationMessage.innerText();
+  }
+}
+```
+
+Use the page object in your test:
+
+```javascript
+import { browser } from 'k6/browser';
+import { Homepage } from '../pages/homepage.js';
+import { bookingData } from '../data/booking-data.js';
+
+export default async function () {
+  const page = await browser.newPage();
+
+  const { name } = bookingData;
+
+  const homepage = new Homepage(page);
+  await homepage.goto();
+  await homepage.submitForm();
+
+  const message = await homepage.getVerificationMessage();
+  console.log(`Verification: ${message}`);
+
+  await page.close();
+}
+```
+
+## Set Performance Thresholds
+
+Define thresholds for browser metrics to catch performance regressions early.
+
+### Web Vitals Thresholds
+
+```javascript
+export const options = {
+  scenarios: {
+    ui: {
+      executor: 'shared-iterations',
+      options: {
+        browser: {
+          type: 'chromium',
+        },
+      },
+    },
+  },
+  thresholds: {
+    // Core Web Vitals
+    'browser_web_vital_lcp': ['p(90) < 1000'],  // Largest Contentful Paint
+    'browser_web_vital_fcp': ['p(95) < 800'],   // First Contentful Paint
+    'browser_web_vital_inp': ['p(90) < 100'],   // Interaction to Next Paint
+    'browser_web_vital_cls': ['p(95) < 0.1'],   // Cumulative Layout Shift
+    
+    // Other metrics
+    'browser_http_req_duration': ['p(95) < 500'],
+    'browser_http_req_failed': ['rate < 0.01'],
+    'checks': ['rate==1.0'],
+  },
+};
+```
+
+### URL-Specific Thresholds
+
+Set different thresholds for different pages:
+
+```javascript
+export const options = {
+  thresholds: {
+    'browser_web_vital_lcp': ['p(90) < 1000'],
+    'browser_web_vital_inp{url:https://test.k6.io/}': ['p(90) < 80'],
+    'browser_web_vital_inp{url:https://test.k6.io/my_messages.php}': ['p(90) < 100'],
+  },
+};
+```
+
+## Handle Dynamic Elements
+
+Use `waitFor()` to handle elements that appear dynamically:
+
+```javascript
+// Wait for element to appear
+const dynamicButton = page.locator('[data-test="load-more"]');
+await dynamicButton.waitFor();
+await dynamicButton.click();
+
+// Wait for element to be visible
+const modal = page.locator('.modal');
+await modal.waitFor({ state: 'visible' });
+
+// Wait for element to be hidden
+const loadingSpinner = page.locator('.loading-spinner');
+await loadingSpinner.waitFor({ state: 'hidden' });
+```
+
+## Measure Custom Metrics
+
+Use the Performance API with k6 Trends to track custom timing metrics:
+
+```javascript
+import { browser } from 'k6/browser';
+import { Trend } from 'k6/metrics';
+
+const myTrend = new Trend('total_action_time', true);
+
+export const options = {
+  scenarios: {
+    ui: {
+      executor: 'shared-iterations',
+      options: {
+        browser: {
+          type: 'chromium',
+        },
+      },
+    },
+  },
+};
+
+export default async function () {
+  const page = await browser.newPage();
+
+  try {
+    await page.goto('https://test.k6.io/browser.php');
+    
+    // Mark start time
+    await page.evaluate(() => window.performance.mark('page-visit'));
+
+    // Perform actions
+    await page.locator('#checkbox1').check();
+    await page.locator('#counter-button').click();
+    await page.locator('#text1').fill('This is a test');
+
+    // Mark end time
+    await page.evaluate(() => window.performance.mark('action-completed'));
+
+    // Measure duration
+    await page.evaluate(() =>
+      window.performance.measure('total-action-time', 'page-visit', 'action-completed')
+    );
+
+    const totalActionTime = await page.evaluate(
+      () =>
+        JSON.parse(JSON.stringify(window.performance.getEntriesByName('total-action-time')))[0]
+          .duration
+    );
+
+    myTrend.add(totalActionTime);
+  } finally {
+    await page.close();
+  }
+}
+```
+
+## Environment Variables
+
+Use environment variables to make tests reusable across environments:
+
+```javascript
+const BASE_URL = __ENV.BASE_URL || 'https://test.k6.io';
+const USERNAME = __ENV.USERNAME || 'admin';
+const PASSWORD = __ENV.PASSWORD || 'password123';
+
+export default async function () {
+  const page = await browser.newPage();
+
+  try {
+    await page.goto(BASE_URL);
+    await page.locator('[name="username"]').type(USERNAME);
+    await page.locator('[name="password"]').type(PASSWORD);
+    await page.locator('[type="submit"]').click();
+  } finally {
+    await page.close();
+  }
+}
+```
+
+Run with custom values:
+
+```bash
+k6 run -e BASE_URL=https://staging.example.com -e USERNAME=testuser script.js
+```
+
+## Summary
+
+<Steps>
+
+### Resource Management
+
+Always close pages with `try`/`finally` blocks for proper cleanup.
+
+### Robust Selectors
+
+Use ARIA labels and data attributes instead of class names or generic elements.
+
+### Hybrid Testing
+
+Combine 10% browser VUs with 90% protocol-level VUs for efficient testing.
+
+### Code Organization
+
+Implement page object model for large test suites.
+
+### Performance Monitoring
+
+Set thresholds for Web Vitals and custom metrics.
+
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Overview" href="/browser/overview">
+    Review browser testing fundamentals
+  </Card>
+  <Card title="Getting Started" href="/browser/getting-started">
+    Write your first browser test
+  </Card>
+</CardGroup>

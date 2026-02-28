@@ -1,0 +1,185 @@
+---
+title: k6 archive format
+description: Understanding and using k6 archives for test distribution
+icon: file-zipper
+---
+
+# k6 archive format
+
+A k6 archive is a self-contained bundle that includes your test script and all its dependencies. Archives are useful for:
+
+- Distributing tests to multiple machines
+- Ensuring consistent test execution across environments
+- Running tests in air-gapped or restricted environments
+- Sharing tests with your team
+
+## Creating an archive
+
+Use the `k6 archive` command to create an archive:
+
+```bash
+k6 archive script.js
+```
+
+This creates an `archive.tar` file containing:
+
+- Your test script
+- All imported modules and dependencies
+- Metadata about the test
+
+### Specify output file
+
+```bash
+k6 archive script.js -O my-test.tar
+```
+
+### Include external files
+
+If your test uses `open()` to load external files, k6 automatically includes them in the archive:
+
+```javascript
+import { SharedArray } from 'k6/data';
+
+const data = new SharedArray('users', function () {
+  return JSON.parse(open('./users.json'));
+});
+```
+
+## Running from an archive
+
+Execute tests directly from an archive:
+
+```bash
+k6 run archive.tar
+```
+
+You can still override options:
+
+```bash
+k6 run archive.tar --vus 100 --duration 5m
+```
+
+## Archive structure
+
+A k6 archive is a tar file with this structure:
+
+```
+archive.tar
+├── metadata.json       # Test metadata and options
+├── data               # Test script and dependencies
+│   ├── script.js
+│   ├── users.json
+│   └── node_modules/
+└── ...
+```
+
+### Metadata
+
+The `metadata.json` file contains:
+
+- Test options (VUs, duration, thresholds, etc.)
+- Script filename
+- Environment information
+- k6 version used to create the archive
+
+## Use cases
+
+<CardGroup cols={2}>
+  <Card title="Distributed testing" icon="network-wired">
+    Create an archive once and distribute it to multiple test runners for consistent execution.
+  </Card>
+  
+  <Card title="CI/CD pipelines" icon="code-branch">
+    Build archives as artifacts and run them in different stages of your pipeline.
+  </Card>
+  
+  <Card title="Air-gapped environments" icon="shield">
+    Transfer archives to restricted networks where dependencies can't be downloaded.
+  </Card>
+  
+  <Card title="Version control" icon="code-commit">
+    Store archives alongside your code to ensure reproducible test runs.
+  </Card>
+</CardGroup>
+
+## Example workflow
+
+<Steps>
+  <Step title="Create the archive">
+    Build your test with all dependencies:
+
+    ```bash
+    k6 archive test-script.js -O load-test-v1.tar
+    ```
+  </Step>
+
+  <Step title="Distribute the archive">
+    Copy the archive to your test runners:
+
+    ```bash
+    scp load-test-v1.tar test-runner-1:/tests/
+    scp load-test-v1.tar test-runner-2:/tests/
+    ```
+  </Step>
+
+  <Step title="Run on multiple machines">
+    Execute the same archive on all runners:
+
+    ```bash
+    # On test-runner-1
+    k6 run load-test-v1.tar
+
+    # On test-runner-2
+    k6 run load-test-v1.tar
+    ```
+  </Step>
+</Steps>
+
+## Best practices
+
+<Tip>
+  Version your archives with meaningful names like `api-test-v1.2.3.tar` to track changes over time.
+</Tip>
+
+<AccordionGroup>
+  <Accordion title="Keep archives small">
+    Only include necessary dependencies. Large archives take longer to transfer and extract.
+  </Accordion>
+
+  <Accordion title="Document requirements">
+    Include a README with the archive specifying any external requirements or configuration needed.
+  </Accordion>
+
+  <Accordion title="Test before distribution">
+    Always test your archive locally before distributing it to ensure all dependencies are included.
+  </Accordion>
+
+  <Accordion title="Use with environment variables">
+    Archives work well with environment variables for configuration:
+
+    ```bash
+    BASE_URL=https://prod.example.com k6 run archive.tar
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Limitations
+
+<Warning>
+  Archives are created for a specific k6 version. Running an archive with a different k6 version may cause compatibility issues.
+</Warning>
+
+- Archives are not compressed by default (use gzip if needed)
+- Binary extensions are not included in archives
+- Archives contain absolute file paths from creation time
+
+## Related resources
+
+<CardGroup cols={2}>
+  <Card title="Distributed tests" icon="server" href="/testing-guides/distributed-tests">
+    Running tests across multiple machines
+  </Card>
+  <Card title="Automated testing" icon="robot" href="/testing-guides/automated-testing">
+    Integrating k6 with CI/CD
+  </Card>
+</CardGroup>

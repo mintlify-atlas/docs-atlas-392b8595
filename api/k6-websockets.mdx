@@ -1,0 +1,263 @@
+---
+title: 'k6/websockets'
+description: 'WebSocket API with browser-compatible interface and global event loop'
+icon: 'plug'
+---
+
+The `k6/websockets` module implements the browser [WebSocket API](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket) with additional k6-specific functionality like cookies, tags, and custom headers.
+
+<Note>
+The `k6/experimental/websockets` module has been deprecated. Use `k6/websockets` instead.
+</Note>
+
+## Overview
+
+This module uses a **global event loop** instead of a local one, which enables a single VU to handle multiple concurrent WebSocket connections. This improves performance compared to the older `k6/ws` module.
+
+## Key Difference from k6/ws
+
+The main difference between `k6/websockets` and `k6/ws` is that this module uses a global event loop, allowing a single VU to have multiple concurrent connections, which improves performance.
+
+## Importing the Module
+
+```javascript
+import { WebSocket } from 'k6/websockets';
+```
+
+## API Reference
+
+### Classes and Methods
+
+<ResponseField name="WebSocket(url, protocols, params)" type="constructor">
+  Constructs a new WebSocket connection.
+  
+  **Parameters:**
+  <ParamField path="url" type="string" required>
+    WebSocket URL (e.g., `wss://echo.websocket.org`)
+  </ParamField>
+  
+  <ParamField path="protocols" type="string | string[]">
+    Optional protocol(s) to use
+  </ParamField>
+  
+  <ParamField path="params" type="Params">
+    Connection parameters (headers, cookies, compression, tags)
+  </ParamField>
+</ResponseField>
+
+### Instance Methods
+
+<ResponseField name="WebSocket.close()" type="function">
+  Closes the WebSocket connection.
+</ResponseField>
+
+<ResponseField name="WebSocket.ping()" type="function">
+  Sends a ping frame to the server.
+</ResponseField>
+
+<ResponseField name="WebSocket.send(data)" type="function">
+  Sends data through the WebSocket connection.
+  
+  **Parameters:**
+  <ParamField path="data" type="string | ArrayBuffer | Blob" required>
+    Data to send to the server
+  </ParamField>
+</ResponseField>
+
+<ResponseField name="WebSocket.addEventListener(event, handler)" type="function">
+  Adds an event listener for a specific event.
+  
+  **Parameters:**
+  <ParamField path="event" type="string" required>
+    Event name: `'open'`, `'message'`, `'error'`, `'close'`, `'ping'`, `'pong'`
+  </ParamField>
+  
+  <ParamField path="handler" type="function" required>
+    Callback function to handle the event
+  </ParamField>
+</ResponseField>
+
+### Instance Properties
+
+<ResponseField name="WebSocket.readyState" type="number">
+  The current state of the connection. One of:
+  - `0` - CONNECTING
+  - `1` - OPEN
+  - `2` - CLOSING
+  - `3` - CLOSED
+</ResponseField>
+
+<ResponseField name="WebSocket.url" type="string">
+  The URL of the connection as resolved by the constructor.
+</ResponseField>
+
+<ResponseField name="WebSocket.bufferedAmount" type="number">
+  The number of bytes queued using `send()` but not yet transmitted.
+</ResponseField>
+
+<ResponseField name="WebSocket.binaryType" type="string">
+  Controls the type of binary data received. Either `"blob"` (default) or `"arraybuffer"`.
+</ResponseField>
+
+### Event Handlers
+
+<ResponseField name="WebSocket.onopen" type="function">
+  Handler called when the connection is established.
+</ResponseField>
+
+<ResponseField name="WebSocket.onmessage" type="function">
+  Handler called when a message is received.
+</ResponseField>
+
+<ResponseField name="WebSocket.onerror" type="function">
+  Handler called when an error occurs.
+</ResponseField>
+
+<ResponseField name="WebSocket.onclose" type="function">
+  Handler called when the connection is closed.
+</ResponseField>
+
+<ResponseField name="WebSocket.onping" type="function">
+  Handler called when a ping is received.
+</ResponseField>
+
+<ResponseField name="WebSocket.onpong" type="function">
+  Handler called when a pong is received.
+</ResponseField>
+
+## Connection Parameters
+
+### Params Object
+
+<ParamField path="compression" type="string">
+  Compression algorithm to use. Currently only `"deflate"` is supported.
+</ParamField>
+
+<ParamField path="jar" type="http.CookieJar">
+  Cookie jar for the WebSocket connection. Uses the default VU cookie jar if not specified.
+</ParamField>
+
+<ParamField path="headers" type="object">
+  Custom HTTP headers to include in the WebSocket handshake request.
+  
+  ```javascript
+  headers: { 'X-MyHeader': 'k6test' }
+  ```
+</ParamField>
+
+<ParamField path="tags" type="object">
+  Custom metric tags for filtering results and setting thresholds.
+  
+  ```javascript
+  tags: { k6test: 'yes' }
+  ```
+</ParamField>
+
+## WebSocket Metrics
+
+k6 automatically collects WebSocket-specific metrics:
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `ws_connecting` | Trend | Time to establish connection |
+| `ws_session_duration` | Trend | Total session duration |
+| `ws_sessions` | Counter | Total number of sessions |
+| `ws_msgs_sent` | Counter | Messages sent |
+| `ws_msgs_received` | Counter | Messages received |
+| `ws_ping` | Trend | Ping round-trip time |
+
+## Examples
+
+### Multiple Concurrent Connections
+
+This example shows how a single VU can run multiple WebSocket connections asynchronously:
+
+<CodeGroup>
+```javascript Multiple Connections
+import { randomString, randomIntBetween } from 'https://jslib.k6.io/k6-utils/1.1.0/index.js';
+import { WebSocket } from 'k6/websockets';
+
+const sessionDuration = randomIntBetween(1000, 3000);
+
+export default function () {
+  for (let i = 0; i < 4; i++) {
+    startWSWorker(i);
+  }
+}
+
+function startWSWorker(id) {
+  const ws = new WebSocket(`wss://quickpizza.grafana.com/ws`);
+  ws.binaryType = 'arraybuffer';
+
+  ws.addEventListener('open', () => {
+    ws.send(JSON.stringify({ event: 'SET_NAME', new_name: `VU ${__VU}:${id}` }));
+
+    ws.addEventListener('message', (e) => {
+      const msg = JSON.parse(e.data);
+      if (msg.event === 'CHAT_MSG') {
+        console.log(`VU ${__VU}:${id} received: ${msg.user} says: ${msg.message}`);
+      } else if (msg.event === 'ERROR') {
+        console.error(`VU ${__VU}:${id} received:: ${msg.message}`);
+      }
+    });
+
+    const intervalId = setInterval(() => {
+      ws.send(JSON.stringify({ event: 'SAY', message: `I'm saying ${randomString(5)}` }));
+    }, randomIntBetween(2000, 8000));
+
+    const timeout1id = setTimeout(function () {
+      clearInterval(intervalId);
+      console.log(`VU ${__VU}:${id}: ${sessionDuration}ms passed, leaving the chat`);
+      ws.send(JSON.stringify({ event: 'LEAVE' }));
+    }, sessionDuration);
+
+    const timeout2id = setTimeout(function () {
+      console.log(`Closing the socket forcefully 3s after graceful LEAVE`);
+      ws.close();
+    }, sessionDuration + 3000);
+
+    ws.addEventListener('close', () => {
+      clearTimeout(timeout1id);
+      clearTimeout(timeout2id);
+      console.log(`VU ${__VU}:${id}: disconnected`);
+    });
+  });
+}
+```
+
+```javascript Custom Headers and Tags
+import { WebSocket } from 'k6/websockets';
+
+export default function () {
+  const url = 'ws://localhost:10000';
+  const params = {
+    headers: { 'X-MyHeader': 'k6test' },
+    tags: { k6test: 'yes' },
+  };
+
+  const ws = new WebSocket(url, null, params);
+
+  ws.onopen = () => {
+    console.log('WebSocket connection established!');
+    ws.close();
+  };
+}
+```
+</CodeGroup>
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="k6/ws" icon="exchange" href="/api/k6-ws">
+    Alternative WebSocket module with local event loop
+  </Card>
+  <Card title="Blob" icon="file-binary" href="/api/blob">
+    Handle binary data in WebSocket messages
+  </Card>
+  <Card title="WebSocket Testing Guide" icon="book" href="/guides/websocket-testing">
+    Learn WebSocket testing patterns
+  </Card>
+  <Card title="Metrics Reference" icon="chart-line" href="/guides/metrics">
+    WebSocket metrics documentation
+  </Card>
+</CardGroup>

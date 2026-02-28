@@ -1,0 +1,189 @@
+---
+title: Explore Extensions
+description: Discover official and community k6 extensions for protocols, outputs, and specialized testing
+icon: compass
+---
+
+Extensions can be used to extend the core k6 features to fit your performance-testing use cases. There are two main categories of extensions: official and community.
+
+## Official extensions
+
+These are extensions owned and maintained by Grafana Labs, with support for a wide range of versions.
+
+### Protocol extensions
+
+<CardGroup cols={2}>
+  <Card title="k6/x/mqtt" icon="tower-broadcast" href="/extensions/protocol-extensions#mqtt">
+    MQTT protocol support with event-driven architecture, QoS levels, and SSL/TLS
+  </Card>
+  
+  <Card title="k6/x/redis" icon="database" href="/extensions/protocol-extensions#redis">
+    Redis database interaction with promise-based async API
+  </Card>
+  
+  <Card title="k6/x/sql" icon="table" href="/extensions/protocol-extensions#sql">
+    SQL database testing for PostgreSQL, MySQL, SQLite, and more
+  </Card>
+</CardGroup>
+
+### Browser and chaos testing
+
+<CardGroup cols={2}>
+  <Card title="k6 browser" icon="browser" href="/extensions/browser">
+    Browser automation and end-to-end testing with Playwright-compatible APIs
+  </Card>
+  
+  <Card title="xk6-disruptor" icon="bolt" href="/extensions/xk6-disruptor">
+    Chaos testing through fault injection in Kubernetes environments
+  </Card>
+</CardGroup>
+
+### Output extensions
+
+<CardGroup cols={2}>
+  <Card title="xk6-output-prometheus-remote" icon="chart-line">
+    Send metrics to Prometheus via remote write protocol
+  </Card>
+  
+  <Card title="xk6-output-influxdb" icon="chart-area">
+    Export metrics to InfluxDB time-series database
+  </Card>
+</CardGroup>
+
+## Community extensions
+
+These are extensions developed by the community, with support for specific versions.
+
+<Note>
+We're working on a process for community folks to submit their extensions.
+</Note>
+
+### Popular community extensions
+
+<CardGroup cols={2}>
+  <Card title="xk6-kafka" icon="stream">
+    Apache Kafka producer and consumer for event streaming tests
+  </Card>
+  
+  <Card title="xk6-faker" icon="wand-magic-sparkles">
+    Generate realistic fake data for tests
+  </Card>
+  
+  <Card title="xk6-websockets" icon="plug">
+    Enhanced WebSocket support with additional features
+  </Card>
+  
+  <Card title="xk6-dashboard" icon="gauge">
+    Real-time web-based dashboard for test execution
+  </Card>
+</CardGroup>
+
+<Warning>
+Many other extensions maintained by members of the k6 ecosystem are available on [GitHub](https://github.com/topics/xk6). These extensions aren't maintained nor audited by Grafana Labs.
+</Warning>
+
+## Using extensions
+
+There are two ways to use extensions when running a k6 test script.
+
+### Automatic extension resolution
+
+Official and community extensions can be used without additional configuration. They are automatically resolved and loaded by k6 when you import them in your test script.
+
+**Example with xk6-faker:**
+
+```javascript
+import faker from 'k6/x/faker';
+
+export default function () {
+  console.log(faker.person.firstName());
+}
+```
+
+Run your script normally:
+
+```bash
+k6 run script.js
+```
+
+<Note>
+For community extensions, enable them with an environment variable:
+
+```bash
+K6_ENABLE_COMMUNITY_EXTENSIONS=true k6 run test.js
+```
+</Note>
+
+#### Limitations
+
+- Only works with official and community extensions
+- Output extensions aren't supported
+- Running scripts from stdin isn't supported
+- Only files with extensions `.js`, `.ts` or `.tar` can be used
+
+#### Disable automatic resolution
+
+You can disable this feature by setting the environment variable:
+
+```bash
+K6_AUTO_EXTENSION_RESOLUTION=false k6 run test.js
+```
+
+### Custom k6 binary
+
+If you have developed your own k6 extension or want to use an extension that's not available through automatic extension resolution, build a custom k6 binary.
+
+The process involves using the xk6 tool to compile k6 with your desired extensions included. Custom binaries give you the flexibility to incorporate any extension from the k6 ecosystem.
+
+<CodeGroup>
+```bash Go and xk6
+xk6 build \
+  --with github.com/grafana/xk6-sql@v0.0.1 \
+  --with github.com/grafana/xk6-output-prometheus-remote
+```
+
+```bash Docker on Linux
+docker run --rm -u "$(id -u):$(id -g)" -v "${PWD}:/xk6" grafana/xk6 build \
+  --with github.com/grafana/xk6-sql@v0.0.1
+```
+</CodeGroup>
+
+Refer to [Build a Custom k6 Binary](/extensions/bundle) to learn how to create your own k6 binary with custom extensions.
+
+## Finding extensions
+
+To discover more extensions:
+
+<Steps>
+  <Step title="Browse GitHub topics">
+    Search for repositories tagged with [xk6](https://github.com/topics/xk6) on GitHub.
+  </Step>
+  
+  <Step title="Check the k6 community">
+    Visit the [k6 Community Forum](https://community.grafana.com/c/grafana-k6/extensions/82) for discussions about extensions.
+  </Step>
+  
+  <Step title="Review extension registries">
+    Some extensions are listed in community-maintained registries.
+  </Step>
+</Steps>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Build Custom Binary" icon="hammer" href="/extensions/bundle">
+    Learn how to bundle extensions into k6
+  </Card>
+  
+  <Card title="Create Extension" icon="code" href="/extensions/create">
+    Build your own k6 extension
+  </Card>
+  
+  <Card title="Protocol Extensions" icon="network-wired" href="/extensions/protocol-extensions">
+    Explore MQTT, Redis, and SQL extensions
+  </Card>
+  
+  <Card title="xk6-disruptor" icon="bolt" href="/extensions/xk6-disruptor">
+    Try chaos testing with fault injection
+  </Card>
+</CardGroup>

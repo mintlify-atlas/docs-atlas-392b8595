@@ -1,0 +1,292 @@
+---
+title: 'HTTP Authentication'
+description: 'Learn how to test APIs with different authentication methods including Basic Auth, Bearer tokens, NTLM, and AWS Signature v4'
+icon: 'shield-check'
+---
+
+Test APIs that require authentication using various methods. k6 supports all common authentication patterns.
+
+## Basic Authentication
+
+HTTP Basic Auth encodes credentials in the `Authorization` header. You can authenticate in two ways:
+
+### Method 1: URL-based Authentication
+
+Include credentials directly in the URL:
+
+```javascript
+import http from 'k6/http';
+import { check } from 'k6';
+
+const username = 'user';
+const password = 'passwd';
+
+export default function () {
+  const credentials = `${username}:${password}`;
+  const url = `https://${credentials}@quickpizza.grafana.com/api/basic-auth/${username}/${password}`;
+
+  const res = http.get(url);
+
+  check(res, {
+    'status is 200': (r) => r.status === 200,
+    'is authenticated': (r) => r.json().authenticated === true,
+    'is correct user': (r) => r.json().user === username,
+  });
+}
+```
+
+### Method 2: Authorization Header
+
+Manually construct the `Authorization` header:
+
+```javascript
+import encoding from 'k6/encoding';
+import http from 'k6/http';
+import { check } from 'k6';
+
+const username = 'user';
+const password = 'passwd';
+
+export default function () {
+  const credentials = `${username}:${password}`;
+  const encodedCredentials = encoding.b64encode(credentials);
+  
+  const options = {
+    headers: {
+      Authorization: `Basic ${encodedCredentials}`,
+    },
+  };
+
+  const res = http.get(
+    `https://quickpizza.grafana.com/api/basic-auth/${username}/${password}`,
+    options
+  );
+
+  check(res, {
+    'status is 200': (r) => r.status === 200,
+    'is authenticated': (r) => r.json().authenticated === true,
+    'is correct user': (r) => r.json().user === username,
+  });
+}
+```
+
+<Note>
+The `encoding.b64encode()` function base64-encodes the username:password string as required by the Basic Auth specification.
+</Note>
+
+## Bearer Token Authentication
+
+Common for OAuth 2.0 and JWT-based APIs:
+
+```javascript
+import http from 'k6/http';
+import { check } from 'k6';
+
+export default function () {
+  const token = __ENV.API_TOKEN || 'your-token-here';
+  
+  const params = {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  };
+
+  const res = http.get('https://api.example.com/protected', params);
+  
+  check(res, {
+    'is authenticated': (r) => r.status === 200,
+  });
+}
+```
+
+### Dynamic Token Retrieval
+
+Retrieve tokens during the setup stage:
+
+```javascript
+import http from 'k6/http';
+import { check } from 'k6';
+
+export function setup() {
+  // Authenticate and get token
+  const loginRes = http.post('https://api.example.com/auth/login', 
+    JSON.stringify({
+      username: __ENV.USERNAME,
+      password: __ENV.PASSWORD,
+    }),
+    { headers: { 'Content-Type': 'application/json' } }
+  );
+  
+  return { token: loginRes.json('access_token') };
+}
+
+export default function (data) {
+  const params = {
+    headers: {
+      'Authorization': `Bearer ${data.token}`,
+    },
+  };
+  
+  const res = http.get('https://api.example.com/data', params);
+  check(res, { 'status is 200': (r) => r.status === 200 });
+}
+```
+
+## NTLM Authentication
+
+For Windows-integrated authentication:
+
+```javascript
+import http from 'k6/http';
+
+const username = 'user';
+const password = 'passwd';
+
+export default function () {
+  const credentials = `${username}:${password}`;
+  const res = http.get(
+    `http://${credentials}@example.com/`,
+    { auth: 'ntlm' }
+  );
+}
+```
+
+<Tip>
+Specify the `auth: 'ntlm'` parameter to enable NTLM authentication mode.
+</Tip>
+
+## AWS Signature v4
+
+Authenticate requests to AWS APIs using the [k6-jslib-aws](https://github.com/grafana/k6-jslib-aws) library:
+
+```javascript
+import http from 'k6/http';
+import {
+  AWSConfig,
+  SignatureV4,
+} from 'https://jslib.k6.io/aws/0.11.0/signature.js';
+
+const awsConfig = new AWSConfig({
+  region: __ENV.AWS_REGION,
+  accessKeyId: __ENV.AWS_ACCESS_KEY_ID,
+  secretAccessKey: __ENV.AWS_SECRET_ACCESS_KEY,
+  sessionToken: __ENV.AWS_SESSION_TOKEN, // Optional for temporary credentials
+});
+
+export default function () {
+  // Create a signer instance
+  const signer = new SignatureV4({
+    service: 's3',
+    region: awsConfig.region,
+    credentials: {
+      accessKeyId: awsConfig.accessKeyId,
+      secretAccessKey: awsConfig.secretAccessKey,
+      sessionToken: awsConfig.sessionToken,
+    },
+  });
+
+  // Sign the request
+  const signedRequest = signer.sign(
+    {
+      method: 'GET',
+      protocol: 'https',
+      hostname: 'test-jslib-aws.s3.us-east-1.amazonaws.com',
+      path: '/bonjour.txt',
+      headers: {},
+      uriEscapePath: false,
+      applyChecksum: false,
+    },
+    {
+      signingDate: new Date(),
+      signingService: 's3',
+      signingRegion: 'us-east-1',
+    }
+  );
+
+  // Send the signed request
+  http.get(signedRequest.url, { headers: signedRequest.headers });
+}
+```
+
+### Running with AWS Credentials
+
+```sh
+k6 run \
+  -e AWS_REGION=us-east-1 \
+  -e AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE \
+  -e AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY \
+  script.js
+```
+
+<Note>
+For temporary credentials (like from AWS STS), include `AWS_SESSION_TOKEN` as an environment variable.
+</Note>
+
+## Authentication Patterns
+
+<Tabs>
+  <Tab title="Single User">
+    Use hardcoded or environment-based credentials:
+    
+    ```javascript
+    const username = __ENV.USERNAME || 'testuser';
+    const password = __ENV.PASSWORD || 'testpass';
+    ```
+  </Tab>
+  
+  <Tab title="Multiple Users">
+    Load users from a CSV file:
+    
+    ```javascript
+    import papaparse from 'https://jslib.k6.io/papaparse/5.1.1/index.js';
+    
+    const csvData = papaparse.parse(open('./users.csv'), { header: true }).data;
+    
+    export default function () {
+      const user = csvData[__VU % csvData.length];
+      const res = http.post('https://api.example.com/login', 
+        JSON.stringify({
+          username: user.username,
+          password: user.password,
+        })
+      );
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Token Refresh">
+    Handle token expiration:
+    
+    ```javascript
+    let token = null;
+    let tokenExpiry = 0;
+    
+    export default function () {
+      // Refresh token if expired
+      if (Date.now() > tokenExpiry) {
+        const res = http.post('https://api.example.com/auth/refresh');
+        token = res.json('access_token');
+        tokenExpiry = Date.now() + (res.json('expires_in') * 1000);
+      }
+      
+      // Use token in request
+      http.get('https://api.example.com/data', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="API CRUD Operations" icon="database" href="/examples/api-crud-operations">
+    Test complete REST API workflows
+  </Card>
+  
+  <Card title="Correlation & Dynamic Data" icon="link" href="/examples/correlation-and-dynamic-data">
+    Extract and reuse tokens from responses
+  </Card>
+</CardGroup>

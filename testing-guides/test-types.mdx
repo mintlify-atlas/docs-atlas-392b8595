@@ -1,0 +1,271 @@
+---
+title: Test Types
+description: Learn about different k6 test types - smoke, load, stress, spike, soak, and breakpoint tests for comprehensive performance testing
+---
+
+Many things can go wrong when a system is under load. The system must run numerous operations simultaneously and respond to different requests from a variable number of users. To prepare for these performance risks, teams use different types of load tests.
+
+## Overview
+
+A comprehensive load testing strategy requires more than just executing a single script. Different patterns of traffic create different risk profiles for your application. Each test type serves a specific purpose in validating your system's performance.
+
+<CardGroup cols={2}>
+  <Card title="Smoke Tests" icon="flask" href="#smoke-tests">
+    Validate scripts and basic functionality with minimal load
+  </Card>
+  <Card title="Load Tests" icon="gauge" href="#load-tests">
+    Assess performance under typical production conditions
+  </Card>
+  <Card title="Stress Tests" icon="bolt" href="#stress-tests">
+    Test system limits under extreme conditions
+  </Card>
+  <Card title="Spike Tests" icon="arrow-trend-up" href="#spike-tests">
+    Validate behavior during sudden traffic surges
+  </Card>
+  <Card title="Soak Tests" icon="clock" href="#soak-tests">
+    Check reliability over extended periods
+  </Card>
+  <Card title="Breakpoint Tests" icon="chart-line" href="#breakpoint-tests">
+    Find system capacity limits
+  </Card>
+</CardGroup>
+
+## Smoke Tests
+
+Smoke tests use minimal load to verify that your test script works correctly and the system responds without errors.
+
+**When to run:** Every time you create or modify a test script, or when application code changes.
+
+**Configuration:**
+- 2-5 virtual users
+- 30 seconds to 3 minutes duration
+- Minimal iterations
+
+```javascript
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+
+export const options = {
+  vus: 3,
+  duration: '1m',
+};
+
+export default function () {
+  const res = http.get('https://quickpizza.grafana.com');
+  check(res, { 'status is 200': (r) => r.status === 200 });
+  sleep(1);
+}
+```
+
+<Note>
+Always run smoke tests before executing larger test types. Fix any errors before proceeding.
+</Note>
+
+## Load Tests
+
+Average-load tests (or "load tests") assess how your system performs under typical, expected traffic conditions.
+
+**When to run:** Regularly, to verify the system maintains performance standards under normal production load.
+
+**Configuration:**
+- Gradual ramp-up (5-15% of total duration)
+- Sustained load period (5x longer than ramp-up)
+- Optional ramp-down period
+
+```javascript
+import http from 'k6/http';
+import { sleep } from 'k6';
+
+export const options = {
+  stages: [
+    { duration: '5m', target: 100 },  // Ramp up to 100 users
+    { duration: '30m', target: 100 }, // Stay at 100 users
+    { duration: '5m', target: 0 },    // Ramp down
+  ],
+};
+
+export default function () {
+  http.get('https://quickpizza.grafana.com');
+  sleep(1);
+}
+```
+
+<Tip>
+Use monitoring tools to determine your production's average VU count and request rate.
+</Tip>
+
+## Stress Tests
+
+Stress tests assess system performance when loads exceed the expected average, testing stability under heavy use.
+
+**When to run:** After average-load tests pass, to verify the system handles peak traffic periods (rush hours, deadlines, end-of-week).
+
+**Configuration:**
+- Load 50-100%+ above average (or more, depending on risk)
+- Longer ramp-up period
+- Extended plateau duration
+
+```javascript
+import http from 'k6/http';
+import { sleep } from 'k6';
+
+export const options = {
+  stages: [
+    { duration: '10m', target: 200 }, // Ramp up to higher load
+    { duration: '30m', target: 200 }, // Sustain high load
+    { duration: '5m', target: 0 },    // Ramp down
+  ],
+};
+
+export default function () {
+  http.get('https://quickpizza.grafana.com');
+  sleep(1);
+}
+```
+
+<Warning>
+Expect worse performance compared to average load. The goal is to determine how much performance degrades and whether the system survives.
+</Warning>
+
+## Spike Tests
+
+Spike tests verify whether the system survives sudden and massive rushes of traffic with little to no ramp-up time.
+
+**When to run:** When the system may experience events like ticket sales, product launches, broadcast ads, or seasonal sales.
+
+**Configuration:**
+- Very fast or no ramp-up
+- Extremely high load
+- Brief or no plateau
+- Fast ramp-down
+
+```javascript
+import http from 'k6/http';
+import { sleep } from 'k6';
+
+export const options = {
+  stages: [
+    { duration: '2m', target: 2000 }, // Fast ramp-up to high point
+    { duration: '1m', target: 0 },    // Quick ramp-down
+  ],
+};
+
+export default function () {
+  http.get('https://quickpizza.grafana.com');
+  sleep(1);
+}
+```
+
+<Note>
+Spike tests often reveal errors. Run, tune, and repeat until the system can handle the load.
+</Note>
+
+## Soak Tests
+
+Soak tests (also called endurance tests) verify the system's reliability and performance over extended periods.
+
+**When to run:** After other test types pass, to check for degradation issues that only appear after prolonged use.
+
+**Configuration:**
+- Average load levels
+- Extended duration (3-72 hours)
+- Same ramp-up/down as load tests
+
+```javascript
+import http from 'k6/http';
+import { sleep } from 'k6';
+
+export const options = {
+  stages: [
+    { duration: '5m', target: 100 },  // Ramp up
+    { duration: '8h', target: 100 },  // Extended duration!
+    { duration: '5m', target: 0 },    // Ramp down
+  ],
+};
+
+export default function () {
+  http.get('https://quickpizza.grafana.com');
+  sleep(1);
+}
+```
+
+<Tip>
+Monitor backend resources carefully during soak tests to detect memory leaks, resource exhaustion, and gradual degradation.
+</Tip>
+
+## Breakpoint Tests
+
+Breakpoint tests gradually increase load to identify the system's capacity limits and breaking points.
+
+**When to run:** Periodically, to understand the upper limits of your system's capacity.
+
+**Configuration:**
+- Continuous load increase
+- Runs until failure or unacceptable performance
+- No plateau period
+
+## Test Type Comparison
+
+| Test Type | Load Level | Duration | Primary Goal |
+|-----------|-----------|----------|-------------|
+| **Smoke** | Minimal (2-5 VUs) | Short (1-3 min) | Verify script and basic functionality |
+| **Load** | Average production | Medium (5-60 min) | Assess normal performance |
+| **Stress** | Above average | Medium (5-60 min) | Test high-load stability |
+| **Spike** | Very high | Short (few min) | Validate surge handling |
+| **Soak** | Average | Long (hours/days) | Check prolonged reliability |
+| **Breakpoint** | Increasing | Until failure | Find capacity limits |
+
+## Best Practices
+
+<Steps>
+  <Step title="Start with smoke tests">
+    Always begin with smoke tests to validate your scripts and establish baseline performance before running larger tests.
+  </Step>
+  
+  <Step title="Progress gradually">
+    Move from smoke → load → stress → soak. Don't skip test types or you may miss critical issues.
+  </Step>
+  
+  <Step title="Keep designs simple">
+    Use simple load patterns: ramp-up, plateau, ramp-down. Avoid complex "rollercoaster" patterns that waste resources and make issues hard to isolate.
+  </Step>
+  
+  <Step title="Customize to your context">
+    Adapt test configurations to your specific risk profile. A stress test for one system may be a load test for another.
+  </Step>
+  
+  <Step title="Monitor continuously">
+    Use backend monitoring to correlate test results with system metrics. This helps identify root causes of performance issues.
+  </Step>
+</Steps>
+
+## Modeling Workload
+
+k6 provides two ways to model load:
+
+**Virtual Users (VUs):** Simulate concurrent users
+```javascript
+export const options = {
+  vus: 50,
+  duration: '30s',
+};
+```
+
+**Request Rate:** Simulate specific throughput
+```javascript
+export const options = {
+  scenarios: {
+    constant_request_rate: {
+      executor: 'constant-arrival-rate',
+      rate: 50,
+      timeUnit: '1s',
+      duration: '30s',
+      preAllocatedVUs: 50,
+    },
+  },
+};
+```
+
+<Note>
+No single test type eliminates all risk. Use multiple test types to assess different failure modes and build confidence in your system's reliability.
+</Note>

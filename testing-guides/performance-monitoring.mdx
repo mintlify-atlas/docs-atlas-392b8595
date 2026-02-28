@@ -1,0 +1,622 @@
+---
+title: Performance Monitoring
+description: Use k6 for continuous performance monitoring with synthetic tests and production validation
+---
+
+Performance monitoring with k6 enables continuous validation of your applications in production environments. By running lightweight synthetic tests, you can proactively detect issues before they impact users.
+
+## Synthetic Monitoring Overview
+
+Synthetic monitoring runs automated tests against your production systems at regular intervals to:
+
+<CardGroup cols={2}>
+  <Card title="Validate Availability" icon="heart-pulse">
+    Ensure your services are accessible and responding correctly
+  </Card>
+  <Card title="Monitor Performance" icon="gauge">
+    Track response times and performance metrics over time
+  </Card>
+  <Card title="Detect Regressions" icon="magnifying-glass">
+    Identify performance degradation after deployments
+  </Card>
+  <Card title="Test Critical Flows" icon="route">
+    Verify key user journeys work as expected
+  </Card>
+</CardGroup>
+
+## Creating Synthetic Tests
+
+Synthetic tests should be lightweight and focused on critical functionality:
+
+### Basic Health Check
+
+```javascript health-check.js
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+
+export const options = {
+  vus: 1,
+  duration: '30s',
+  thresholds: {
+    http_req_failed: ['rate<0.01'],
+    http_req_duration: ['p(95)<1000'],
+  },
+};
+
+export default function () {
+  const res = http.get('https://api.example.com/health');
+  
+  check(res, {
+    'API is available': (r) => r.status === 200,
+    'Response time acceptable': (r) => r.timings.duration < 500,
+    'Health status OK': (r) => r.json('status') === 'healthy',
+  });
+  
+  sleep(5);
+}
+```
+
+### API Endpoint Monitoring
+
+```javascript api-monitor.js
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+import { Rate, Trend } from 'k6/metrics';
+
+const errorRate = new Rate('api_errors');
+const apiLatency = new Trend('api_latency');
+
+export const options = {
+  vus: 1,
+  duration: '1m',
+  thresholds: {
+    'api_errors': ['rate<0.05'],
+    'api_latency': ['p(95)<500'],
+  },
+};
+
+const endpoints = [
+  '/api/users',
+  '/api/products',
+  '/api/orders',
+];
+
+export default function () {
+  for (const endpoint of endpoints) {
+    const start = Date.now();
+    const res = http.get(`https://api.example.com${endpoint}`);
+    const duration = Date.now() - start;
+    
+    const success = check(res, {
+      [`${endpoint} status 200`]: (r) => r.status === 200,
+      [`${endpoint} has data`]: (r) => r.json().length > 0,
+    });
+    
+    errorRate.add(!success, { endpoint });
+    apiLatency.add(duration, { endpoint });
+    
+    sleep(1);
+  }
+}
+```
+
+### Critical User Journey
+
+```javascript user-journey-monitor.js
+import http from 'k6/http';
+import { check, group, sleep } from 'k6';
+
+export const options = {
+  vus: 1,
+  duration: '1m',
+  thresholds: {
+    'checks{journey:login}': ['rate>0.95'],
+    'checks{journey:browse}': ['rate>0.95'],
+    'checks{journey:purchase}': ['rate>0.95'],
+    'http_req_duration{journey:purchase}': ['p(95)<3000'],
+  },
+};
+
+export default function () {
+  let authToken;
+  
+  // Login
+  group('User Login', function () {
+    const loginRes = http.post('https://api.example.com/auth/login',
+      JSON.stringify({ username: 'monitor@example.com', password: 'secret' }),
+      { 
+        headers: { 'Content-Type': 'application/json' },
+        tags: { journey: 'login' },
+      }
+    );
+    
+    check(loginRes, {
+      'login successful': (r) => r.status === 200,
+      'token received': (r) => r.json('token') !== undefined,
+    }, { journey: 'login' });
+    
+    authToken = loginRes.json('token');
+    sleep(1);
+  });
+  
+  if (!authToken) return;
+  
+  const headers = {
+    'Authorization': `Bearer ${authToken}`,
+    'Content-Type': 'application/json',
+  };
+  
+  // Browse products
+  group('Browse Products', function () {
+    const productsRes = http.get('https://api.example.com/products',
+      { headers, tags: { journey: 'browse' } });
+    
+    check(productsRes, {
+      'products loaded': (r) => r.status === 200,
+      'has products': (r) => r.json('products').length > 0,
+    }, { journey: 'browse' });
+    
+    sleep(2);
+  });
+  
+  // Add to cart and purchase
+  group('Purchase Flow', function () {
+    const cartRes = http.post('https://api.example.com/cart',
+      JSON.stringify({ productId: 123, quantity: 1 }),
+      { headers, tags: { journey: 'purchase' } });
+    
+    check(cartRes, {
+      'added to cart': (r) => r.status === 200,
+    }, { journey: 'purchase' });
+    
+    sleep(1);
+    
+    const checkoutRes = http.post('https://api.example.com/checkout',
+      JSON.stringify({ cartId: cartRes.json('cartId') }),
+      { headers, tags: { journey: 'purchase' } });
+    
+    check(checkoutRes, {
+      'checkout successful': (r) => r.status === 200,
+      'order created': (r) => r.json('orderId') !== undefined,
+    }, { journey: 'purchase' });
+    
+    sleep(1);
+  });
+}
+```
+
+## Using Grafana Cloud Synthetic Monitoring
+
+Grafana Cloud provides managed synthetic monitoring with k6:
+
+<Steps>
+  <Step title="Create a k6 test">
+    Write a simple k6 test script focusing on critical functionality
+  </Step>
+  
+  <Step title="Configure the check">
+    Set up the check in Grafana Cloud with:
+    - Check frequency (1-60 minutes)
+    - Probe locations (multiple regions)
+    - Alert thresholds
+  </Step>
+  
+  <Step title="Set up alerts">
+    Configure notifications for:
+    - Availability issues
+    - Performance degradation
+    - Failed checks
+  </Step>
+  
+  <Step title="Monitor dashboards">
+    Use built-in dashboards to track:
+    - Response times
+    - Success rates
+    - Geographic performance
+  </Step>
+</Steps>
+
+### Example Synthetic Monitoring Script
+
+```javascript synthetic-check.js
+import http from 'k6/http';
+import { check } from 'k6';
+
+export const options = {
+  thresholds: {
+    // Fail if more than 1% of requests fail
+    http_req_failed: ['rate<0.01'],
+    // Fail if 95% of requests take longer than 2 seconds
+    http_req_duration: ['p(95)<2000'],
+  },
+};
+
+export default function () {
+  // Test homepage
+  const homeRes = http.get('https://example.com');
+  check(homeRes, {
+    'homepage available': (r) => r.status === 200,
+    'homepage loads fast': (r) => r.timings.duration < 1000,
+  });
+  
+  // Test API
+  const apiRes = http.get('https://api.example.com/health');
+  check(apiRes, {
+    'API available': (r) => r.status === 200,
+    'API healthy': (r) => r.json('status') === 'ok',
+  });
+}
+```
+
+## Scheduling Synthetic Tests
+
+<Tabs>
+  <Tab title="Cron Jobs">
+    ```bash
+    # /etc/crontab
+    # Run every 5 minutes
+    */5 * * * * k6 run --out influxdb=http://localhost:8086/k6 /path/to/health-check.js
+    ```
+  </Tab>
+  
+  <Tab title="Kubernetes CronJob">
+    ```yaml
+    apiVersion: batch/v1
+    kind: CronJob
+    metadata:
+      name: k6-synthetic-monitor
+    spec:
+      schedule: "*/5 * * * *"
+      jobTemplate:
+        spec:
+          template:
+            spec:
+              containers:
+              - name: k6
+                image: grafana/k6:latest
+                args:
+                - run
+                - --out
+                - experimental-prometheus-rw
+                - /scripts/health-check.js
+                env:
+                - name: K6_PROMETHEUS_RW_SERVER_URL
+                  value: "http://prometheus:9090/api/v1/write"
+                volumeMounts:
+                - name: scripts
+                  mountPath: /scripts
+              restartPolicy: OnFailure
+              volumes:
+              - name: scripts
+                configMap:
+                  name: k6-scripts
+    ```
+  </Tab>
+  
+  <Tab title="GitHub Actions">
+    ```yaml
+    name: Synthetic Monitoring
+    on:
+      schedule:
+        - cron: '*/15 * * * *'  # Every 15 minutes
+      workflow_dispatch:
+    
+    jobs:
+      synthetic-test:
+        runs-on: ubuntu-latest
+        steps:
+          - uses: actions/checkout@v3
+          
+          - name: Run synthetic test
+            uses: grafana/k6-action@v0.3.1
+            env:
+              K6_CLOUD_TOKEN: ${{ secrets.K6_CLOUD_TOKEN }}
+            with:
+              filename: tests/synthetic-check.js
+              flags: --out cloud
+          
+          - name: Alert on failure
+            if: failure()
+            uses: dawidd6/action-send-mail@v3
+            with:
+              server_address: smtp.gmail.com
+              server_port: 465
+              username: ${{ secrets.MAIL_USERNAME }}
+              password: ${{ secrets.MAIL_PASSWORD }}
+              subject: Synthetic test failed
+              body: The synthetic monitoring test has failed. Check the workflow for details.
+              to: alerts@example.com
+    ```
+  </Tab>
+</Tabs>
+
+## Monitoring Best Practices
+
+### Use Minimal Load
+
+```javascript
+// Keep VUs low for production monitoring
+export const options = {
+  vus: 1,  // Single virtual user
+  duration: '30s',
+};
+```
+
+<Warning>
+Synthetic monitoring should use minimal load to avoid impacting production users.
+</Warning>
+
+### Set Realistic Thresholds
+
+```javascript
+export const options = {
+  thresholds: {
+    // Allow some failures for transient issues
+    http_req_failed: ['rate<0.05'],  // 5% error tolerance
+    
+    // Use percentiles, not averages
+    http_req_duration: ['p(95)<1000', 'p(99)<2000'],
+    
+    // Monitor specific endpoints critically
+    'http_req_duration{endpoint:critical}': ['p(95)<500'],
+  },
+};
+```
+
+### Tag for Better Analysis
+
+```javascript
+import http from 'k6/http';
+
+export default function () {
+  // Tag requests for filtering
+  http.get('https://api.example.com/users', {
+    tags: { 
+      endpoint: 'users',
+      criticality: 'high',
+      region: 'us-east',
+    },
+  });
+}
+```
+
+### Monitor Multiple Regions
+
+```javascript
+import http from 'k6/http';
+import { check } from 'k6';
+
+const regions = [
+  { name: 'us-east', url: 'https://us-east.api.example.com' },
+  { name: 'eu-west', url: 'https://eu-west.api.example.com' },
+  { name: 'ap-south', url: 'https://ap-south.api.example.com' },
+];
+
+export default function () {
+  for (const region of regions) {
+    const res = http.get(`${region.url}/health`, {
+      tags: { region: region.name },
+    });
+    
+    check(res, {
+      [`${region.name} available`]: (r) => r.status === 200,
+    });
+  }
+}
+```
+
+## Alerting Strategies
+
+### Threshold-Based Alerts
+
+```javascript
+export const options = {
+  thresholds: {
+    // Alert if error rate exceeds 5%
+    http_req_failed: [
+      { threshold: 'rate<0.05', abortOnFail: false },
+    ],
+    
+    // Alert if p95 latency exceeds 2 seconds
+    http_req_duration: [
+      { threshold: 'p(95)<2000', abortOnFail: false },
+    ],
+  },
+};
+```
+
+### Consecutive Failure Alerts
+
+```bash
+#!/bin/bash
+# run-with-retry.sh
+
+MAX_FAILURES=3
+FAILURE_COUNT=0
+
+while true; do
+  if k6 run health-check.js; then
+    FAILURE_COUNT=0
+  else
+    FAILURE_COUNT=$((FAILURE_COUNT + 1))
+    
+    if [ $FAILURE_COUNT -ge $MAX_FAILURES ]; then
+      echo "ALERT: $MAX_FAILURES consecutive failures detected"
+      # Send alert
+      curl -X POST https://alerts.example.com/webhook \
+        -H 'Content-Type: application/json' \
+        -d '{"message": "Synthetic monitoring failed 3 times"}'
+      FAILURE_COUNT=0
+    fi
+  fi
+  
+  sleep 300  # Wait 5 minutes
+done
+```
+
+## Visualization and Analysis
+
+### Grafana Dashboard Example
+
+```json
+{
+  "dashboard": {
+    "title": "k6 Synthetic Monitoring",
+    "panels": [
+      {
+        "title": "Availability",
+        "targets": [
+          {
+            "expr": "1 - rate(k6_http_req_failed{job=\"synthetic-monitoring\"}[5m])"
+          }
+        ]
+      },
+      {
+        "title": "Response Time (P95)",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, k6_http_req_duration_bucket{job=\"synthetic-monitoring\"})"
+          }
+        ]
+      },
+      {
+        "title": "Requests Per Minute",
+        "targets": [
+          {
+            "expr": "rate(k6_http_reqs{job=\"synthetic-monitoring\"}[1m]) * 60"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Prometheus Queries
+
+```promql
+# Availability percentage
+100 * (1 - rate(k6_http_req_failed[5m]))
+
+# P95 response time
+histogram_quantile(0.95, rate(k6_http_req_duration_bucket[5m]))
+
+# Error rate by endpoint
+sum by (endpoint) (rate(k6_http_req_failed[5m]))
+
+# Request duration trend
+avg_over_time(k6_http_req_duration[1h])
+```
+
+## Complete Monitoring Setup
+
+```javascript production-monitor.js
+import http from 'k6/http';
+import { check, group, sleep } from 'k6';
+import { Rate, Trend, Counter } from 'k6/metrics';
+
+const availability = new Rate('availability');
+const responseTime = new Trend('response_time');
+const healthChecks = new Counter('health_checks');
+
+export const options = {
+  vus: 1,
+  duration: '1m',
+  thresholds: {
+    'availability': ['rate>0.99'],
+    'response_time': ['p(95)<1000', 'p(99)<2000'],
+    'http_req_duration{check:critical}': ['p(95)<500'],
+  },
+};
+
+const BASE_URL = __ENV.BASE_URL || 'https://api.example.com';
+
+export default function () {
+  // Infrastructure health
+  group('Infrastructure Health', function () {
+    const healthRes = http.get(`${BASE_URL}/health`, {
+      tags: { check: 'infrastructure' },
+    });
+    
+    const healthy = check(healthRes, {
+      'infrastructure healthy': (r) => r.status === 200 && r.json('status') === 'healthy',
+    });
+    
+    availability.add(healthy);
+    healthChecks.add(1, { component: 'infrastructure' });
+  });
+  
+  sleep(1);
+  
+  // API endpoints
+  group('API Endpoints', function () {
+    const endpoints = [
+      { path: '/api/users', critical: true },
+      { path: '/api/products', critical: true },
+      { path: '/api/orders', critical: false },
+    ];
+    
+    for (const endpoint of endpoints) {
+      const start = Date.now();
+      const res = http.get(`${BASE_URL}${endpoint.path}`, {
+        tags: { 
+          check: endpoint.critical ? 'critical' : 'standard',
+          endpoint: endpoint.path,
+        },
+      });
+      const duration = Date.now() - start;
+      
+      const success = check(res, {
+        [`${endpoint.path} available`]: (r) => r.status === 200,
+      });
+      
+      availability.add(success, { endpoint: endpoint.path });
+      responseTime.add(duration, { endpoint: endpoint.path });
+      healthChecks.add(1, { component: 'api', endpoint: endpoint.path });
+      
+      sleep(0.5);
+    }
+  });
+  
+  sleep(2);
+  
+  // Critical user flow
+  group('Critical User Flow', function () {
+    const loginRes = http.post(`${BASE_URL}/auth/login`,
+      JSON.stringify({ username: 'monitor@example.com', password: 'secret' }),
+      { 
+        headers: { 'Content-Type': 'application/json' },
+        tags: { check: 'critical', flow: 'authentication' },
+      }
+    );
+    
+    const authenticated = check(loginRes, {
+      'login successful': (r) => r.status === 200,
+      'token received': (r) => r.json('token') !== undefined,
+    });
+    
+    availability.add(authenticated, { flow: 'authentication' });
+    healthChecks.add(1, { component: 'auth' });
+  });
+  
+  sleep(1);
+}
+
+export function handleSummary(data) {
+  return {
+    'stdout': textSummary(data, { indent: ' ', enableColors: true }),
+    'summary.json': JSON.stringify(data),
+  };
+}
+```
+
+<Note>
+This monitoring setup provides comprehensive coverage of infrastructure, APIs, and critical user flows with detailed metrics and alerting.
+</Note>
+
+## Next Steps
+
+- Learn about [test automation](/testing-guides/automated-testing) for comprehensive CI/CD integration
+- Explore [Grafana Cloud Synthetic Monitoring](https://grafana.com/docs/grafana-cloud/testing/synthetic-monitoring/) for managed monitoring
+- Set up [alerting in Grafana](https://grafana.com/docs/grafana/latest/alerting/) for proactive notifications
+- Review [k6 metrics](/using-k6/metrics) for detailed performance tracking

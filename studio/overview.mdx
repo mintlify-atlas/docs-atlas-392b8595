@@ -1,0 +1,319 @@
+---
+title: k6 Studio
+description: Desktop application for recording and generating k6 test scripts
+icon: desktop
+---
+
+# k6 Studio
+
+k6 Studio is a desktop application that helps you quickly generate k6 test scripts using a visual interface. It's designed to accelerate test creation by recording browser interactions and converting them into k6 code.
+
+## Key features
+
+<CardGroup cols={2}>
+  <Card title="Browser recording" icon="circle-dot">
+    Record user flows from browser interactions and generate HAR files.
+  </Card>
+  
+  <Card title="Test generation" icon="file-code">
+    Convert HAR files into customized k6 test scripts.
+  </Card>
+  
+  <Card title="Script customization" icon="sliders">
+    Use rules to quickly iterate on script creation and refinement.
+  </Card>
+  
+  <Card title="Visual debugging" icon="bug">
+    Test and debug k6 scripts with request/response inspection.
+  </Card>
+</CardGroup>
+
+## Getting started
+
+<Steps>
+  <Step title="Download k6 Studio">
+    Download the latest version for your operating system:
+
+    - [macOS](https://github.com/grafana/k6-studio/releases)
+    - [Windows](https://github.com/grafana/k6-studio/releases)
+    - [Linux](https://github.com/grafana/k6-studio/releases)
+  </Step>
+
+  <Step title="Install and launch">
+    Install k6 Studio and launch the application.
+  </Step>
+
+  <Step title="Start recording">
+    Click **Record** and configure your browser proxy to capture traffic.
+  </Step>
+
+  <Step title="Generate your test">
+    Stop recording and generate a k6 script from the captured HAR file.
+  </Step>
+</Steps>
+
+## Recording user flows
+
+<Info>
+  k6 Studio records browser traffic through a proxy to capture all HTTP requests and responses.
+</Info>
+
+### Recording workflow
+
+<Steps>
+  <Step title="Configure proxy">
+    k6 Studio automatically configures your system proxy settings when you start recording.
+  </Step>
+
+  <Step title="Perform user actions">
+    Navigate your application in the browser, performing the actions you want to test.
+  </Step>
+
+  <Step title="Stop recording">
+    Click **Stop** in k6 Studio to end the recording session.
+  </Step>
+
+  <Step title="Review captured traffic">
+    Review all captured requests and responses in the Studio interface.
+  </Step>
+</Steps>
+
+### What gets recorded
+
+k6 Studio captures:
+
+- HTTP/HTTPS requests and responses
+- Request headers and bodies
+- Response headers and bodies
+- Timing information
+- Cookies and authentication
+
+## Generating test scripts
+
+After recording, k6 Studio helps you convert the HAR file into a k6 test script:
+
+### Customization options
+
+<Tabs>
+  <Tab title="Filtering">
+    Remove unwanted requests:
+
+    - Static assets (images, CSS, JS)
+    - Third-party domains
+    - Specific URLs or patterns
+  </Tab>
+
+  <Tab title="Correlation">
+    Automatically detect and correlate dynamic values:
+
+    - Session tokens
+    - CSRF tokens
+    - Dynamic IDs
+    - Timestamps
+  </Tab>
+
+  <Tab title="Parameterization">
+    Replace hardcoded values with variables:
+
+    - User credentials
+    - API keys
+    - Test data
+    - URLs and endpoints
+  </Tab>
+
+  <Tab title="Think time">
+    Add realistic delays between requests:
+
+    - Fixed sleep times
+    - Random delays
+    - Based on recorded timing
+  </Tab>
+</Tabs>
+
+### Rules for script generation
+
+k6 Studio uses rules to transform HAR files:
+
+```javascript
+// Example: Filter out static assets
+{
+  "type": "filter",
+  "pattern": "\\.(css|js|png|jpg|gif)$",
+  "action": "exclude"
+}
+
+// Example: Correlate session tokens
+{
+  "type": "correlate",
+  "extract": "sessionToken",
+  "from": "response.body",
+  "pattern": "token=([^&]+)"
+}
+```
+
+## Visual debugging
+
+k6 Studio provides a visual interface for testing and debugging scripts:
+
+<CardGroup cols={2}>
+  <Card title="Request inspection" icon="magnifying-glass">
+    View detailed information for each request in your script.
+  </Card>
+  
+  <Card title="Response analysis" icon="code">
+    Inspect response headers, bodies, and status codes.
+  </Card>
+  
+  <Card title="Variable tracking" icon="function">
+    See how variables change throughout test execution.
+  </Card>
+  
+  <Card title="Error detection" icon="triangle-exclamation">
+    Identify and fix issues before running full tests.
+  </Card>
+</CardGroup>
+
+## Example workflow
+
+Here's a typical workflow using k6 Studio:
+
+<Steps>
+  <Step title="Record login flow">
+    Start recording and perform a login sequence in your application.
+  </Step>
+
+  <Step title="Generate initial script">
+    Stop recording and generate a k6 script with default settings.
+  </Step>
+
+  <Step title="Customize with rules">
+    Add rules to:
+    - Extract the session token from the login response
+    - Parameterize the username and password
+    - Filter out static assets
+  </Step>
+
+  <Step title="Test the script">
+    Run the script in k6 Studio to verify it works correctly.
+  </Step>
+
+  <Step title="Export and enhance">
+    Export the script and add:
+    - Custom thresholds
+    - Multiple virtual users
+    - Load ramping configuration
+  </Step>
+
+  <Step title="Run in k6">
+    Execute the final script with the k6 CLI or in Grafana Cloud k6.
+  </Step>
+</Steps>
+
+## Common use cases
+
+<AccordionGroup>
+  <Accordion title="API testing">
+    Record API calls from your application and convert them into load tests:
+
+    1. Use your application normally
+    2. k6 Studio captures all API requests
+    3. Generate a test focusing only on API endpoints
+    4. Add multiple VUs to simulate load
+  </Accordion>
+
+  <Accordion title="Authentication flows">
+    Capture complex authentication sequences:
+
+    1. Record login process
+    2. Extract authentication tokens
+    3. Parameterize credentials
+    4. Reuse tokens in subsequent requests
+  </Accordion>
+
+  <Accordion title="Multi-step transactions">
+    Test complete user journeys:
+
+    1. Record checkout process
+    2. Correlate order IDs and session data
+    3. Add checks for successful completion
+    4. Scale to multiple concurrent users
+  </Accordion>
+
+  <Accordion title="Quick prototyping">
+    Rapidly create test scripts:
+
+    1. Record a user flow
+    2. Generate a basic script
+    3. Use as a starting point for customization
+    4. Iterate quickly with rules
+  </Accordion>
+</AccordionGroup>
+
+## Best practices
+
+<Tip>
+  Record the minimal user flow you want to test, then use k6 code to add variations and load patterns.
+</Tip>
+
+<AccordionGroup>
+  <Accordion title="Clean recordings">
+    - Close unnecessary browser tabs
+    - Disable browser extensions that make background requests
+    - Focus on the specific flow you want to test
+  </Accordion>
+
+  <Accordion title="Iterative refinement">
+    - Start with a simple recording
+    - Generate a basic script
+    - Gradually add rules and customizations
+    - Test after each change
+  </Accordion>
+
+  <Accordion title="Manual enhancement">
+    k6 Studio generates a starting point. Enhance scripts manually to:
+    - Add realistic think time
+    - Implement complex logic
+    - Add custom metrics
+    - Configure advanced scenarios
+  </Accordion>
+
+  <Accordion title="Version control">
+    - Save rules and configurations
+    - Track script changes in git
+    - Document customizations
+  </Accordion>
+</AccordionGroup>
+
+## Limitations
+
+<Warning>
+  k6 Studio records HTTP traffic only. WebSocket, gRPC, and other protocols require manual scripting.
+</Warning>
+
+- Limited to HTTP/HTTPS protocols
+- Cannot capture client-side JavaScript execution
+- Binary protocols need manual implementation
+- Some dynamic content may require custom correlation logic
+
+## Documentation
+
+For detailed k6 Studio documentation:
+
+[grafana.com/docs/k6-studio](https://grafana.com/docs/k6-studio/)
+
+## Related resources
+
+<CardGroup cols={2}>
+  <Card title="HTTP requests" icon="globe" href="/using-k6/http-requests">
+    Making HTTP requests with k6
+  </Card>
+  <Card title="Correlation" icon="link" href="/examples/correlation-and-dynamic-data">
+    Extracting and using dynamic data
+  </Card>
+  <Card title="API testing" icon="code" href="/testing-guides/api-load-testing">
+    Load testing REST APIs
+  </Card>
+  <Card title="Grafana Cloud k6" icon="cloud" href="/cloud/overview">
+    Cloud-based test execution
+  </Card>
+</CardGroup>

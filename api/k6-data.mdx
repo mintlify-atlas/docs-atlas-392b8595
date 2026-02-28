@@ -1,0 +1,211 @@
+---
+title: k6/data
+description: Data sharing module with SharedArray for memory-efficient data distribution
+---
+
+The k6/data module provides utilities for sharing data between VUs in a memory-efficient way.
+
+## Import
+
+```javascript
+import { SharedArray } from 'k6/data';
+```
+
+## SharedArray
+
+SharedArray is an array-like object that shares underlying memory between VUs. The constructor function executes only once, and its result is saved in memory once. When a script requests an element, k6 gives a copy of that element.
+
+<ParamField path="name" type="string" required>
+  A unique name for the SharedArray. Used to identify it across VUs.
+</ParamField>
+
+<ParamField path="function" type="function" required>
+  A function that returns an array. This function executes only once during initialization.
+</ParamField>
+
+**Supported operations:**
+- Getting length with `length`
+- Getting elements by index: `array[index]`
+- Using `for-of` loops
+
+<Warning>
+You must construct SharedArray in the init context (before the default function). Attempting to instantiate it elsewhere throws an exception.
+</Warning>
+
+### Basic Example
+
+```javascript
+import { SharedArray } from 'k6/data';
+
+const data = new SharedArray('some name', function () {
+  // All heavy work (opening and processing big files) should be done here.
+  // This happens only once and the result is shared between all VUs.
+  const f = JSON.parse(open('./somefile.json'));
+  return f; // must be an array
+});
+
+export default function () {
+  const element = data[Math.floor(Math.random() * data.length)];
+  // do something with element
+}
+```
+
+### Loading JSON Data
+
+```javascript
+import { SharedArray } from 'k6/data';
+
+const users = new SharedArray('users', function () {
+  return JSON.parse(open('./users.json'));
+});
+
+export default function () {
+  const user = users[Math.floor(Math.random() * users.length)];
+  // use user data
+}
+```
+
+### Filtering Data
+
+```javascript
+import { SharedArray } from 'k6/data';
+
+// Filter inside the constructor - it only runs once
+const activeUsers = new SharedArray('active users', function () {
+  const allUsers = JSON.parse(open('./users.json'));
+  return allUsers.filter(user => user.active);
+});
+
+export default function () {
+  const user = activeUsers[Math.floor(Math.random() * activeUsers.length)];
+  // ...
+}
+```
+
+## Common Pitfalls
+
+<AccordionGroup>
+  <Accordion title="Avoid array methods that create new arrays">
+    Methods like `.filter()` and `.map()` create regular arrays when called on a SharedArray, removing memory benefits.
+
+    **Don't:**
+    ```javascript
+    const data = new SharedArray('users', function () {
+      return JSON.parse(open('./users.json'));
+    });
+
+    export default function () {
+      // This creates a new regular array, losing SharedArray benefits
+      const filtered = data.filter(user => user.active);
+    }
+    ```
+
+    **Do:**
+    ```javascript
+    // Using filter inside the constructor is fine - it only runs once
+    const activeUsers = new SharedArray('active users', function () {
+      const allUsers = JSON.parse(open('./users.json'));
+      return allUsers.filter(user => user.active);
+    });
+
+    export default function () {
+      const user = activeUsers[Math.floor(Math.random() * activeUsers.length)];
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Avoid marshalling the entire SharedArray">
+    Serializing a SharedArray (e.g., with `JSON.stringify()`) converts it to a regular array.
+
+    **Don't:**
+    ```javascript
+    export default function () {
+      // Marshalling the entire SharedArray defeats its purpose
+      const serialized = JSON.stringify(data);
+    }
+    ```
+
+    **Do:**
+    ```javascript
+    export default function () {
+      // Marshal only the element you need
+      const user = data[Math.floor(Math.random() * data.length)];
+      const serialized = JSON.stringify(user);
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Avoid returning SharedArray from setup()">
+    Returning a SharedArray from `setup()` causes it to be marshalled, removing memory benefits.
+
+    **Don't:**
+    ```javascript
+    const data = new SharedArray('users', function () {
+      return JSON.parse(open('./users.json'));
+    });
+
+    export function setup() {
+      return { users: data }; // This marshalls the SharedArray
+    }
+    ```
+
+    **Do:**
+    ```javascript
+    // Keep SharedArray in init context
+    const users = new SharedArray('users', function () {
+      return JSON.parse(open('./users.json'));
+    });
+
+    export default function () {
+      // Access SharedArray directly
+      const user = users[Math.floor(Math.random() * users.length)];
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Open files inside SharedArray callback">
+    Opening files outside the SharedArray callback causes each VU to hold its own copy.
+
+    **Don't:**
+    ```javascript
+    const usersRaw = open('./users.json');
+    const usersJSON = JSON.parse(usersRaw);
+
+    const usersShared = new SharedArray('users', function () { 
+      return usersJSON; 
+    });
+    ```
+
+    **Do:**
+    ```javascript
+    const users = new SharedArray('users', function () {
+      // Do all work inside - opens file only once
+      return JSON.parse(open('./users.json'));
+    });
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Performance Characteristics
+
+Internally, SharedArray keeps data marshaled as JSON and unmarshals elements only when requested. This operation is typically unnoticeable relative to other operations, but for small data sets, SharedArray might perform worse.
+
+**Memory savings:**
+- **100-1000 elements**: Minimal benefit
+- **10,000+ elements**: Significant memory and CPU savings
+- **100,000+ elements**: Dramatic improvement (8-9GB → 238-275MB in tests)
+
+<Info>
+SharedArray is most beneficial for large datasets. For small datasets (< 1000 items), the overhead might outweigh the benefits.
+</Info>
+
+## Use Cases
+
+- Loading test data from large JSON/CSV files
+- Sharing user credentials across VUs
+- Distributing test scenarios or configurations
+- Reusing API payloads without duplication
+
+<Note>
+SharedArray is read-only after construction. You cannot use it to communicate data between VUs during test execution.
+</Note>

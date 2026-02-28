@@ -1,0 +1,398 @@
+---
+title: 'k6/timers'
+description: 'Timer functions for scheduling code execution in k6 event loop'
+icon: 'clock'
+---
+
+The `k6/timers` module implements timer functions that work with k6's event loop. These functions mimic the functionality found in browsers and other JavaScript runtimes.
+
+## Overview
+
+Use timer functions to schedule code execution at specific times or intervals within your k6 tests. These are particularly useful for:
+- Simulating user think time with delays
+- Creating periodic actions (polling, heartbeats)
+- Implementing timeouts for WebSocket or browser tests
+- Controlling test flow and timing
+
+<Note>
+Timer functions are available **globally** in k6 scripts. You don't need to import them unless you prefer explicit imports.
+</Note>
+
+## Importing the Module
+
+```javascript
+// Optional - timers are available globally
+import { setTimeout, clearTimeout, setInterval, clearInterval } from 'k6/timers';
+```
+
+## API Reference
+
+### setTimeout
+
+<ResponseField name="setTimeout(callback, delay, ...args)" type="function">
+  Schedules a function to run after a specified delay.
+  
+  **Parameters:**
+  <ParamField path="callback" type="function" required>
+    Function to execute after the delay
+  </ParamField>
+  
+  <ParamField path="delay" type="number" required>
+    Delay in milliseconds before executing the callback
+  </ParamField>
+  
+  <ParamField path="args" type="...any">
+    Optional arguments to pass to the callback function
+  </ParamField>
+  
+  **Returns:**
+  <ResponseField name="timeoutId" type="number">
+    Timeout identifier that can be used with `clearTimeout()`
+  </ResponseField>
+</ResponseField>
+
+See [MDN: setTimeout](https://developer.mozilla.org/en-US/docs/Web/API/setTimeout) for detailed documentation.
+
+### clearTimeout
+
+<ResponseField name="clearTimeout(timeoutId)" type="function">
+  Cancels a timeout previously established by calling `setTimeout()`.
+  
+  **Parameters:**
+  <ParamField path="timeoutId" type="number" required>
+    The timeout identifier returned by `setTimeout()`
+  </ParamField>
+</ResponseField>
+
+See [MDN: clearTimeout](https://developer.mozilla.org/en-US/docs/Web/API/clearTimeout) for detailed documentation.
+
+### setInterval
+
+<ResponseField name="setInterval(callback, interval, ...args)" type="function">
+  Schedules a function to run repeatedly at specified intervals.
+  
+  **Parameters:**
+  <ParamField path="callback" type="function" required>
+    Function to execute at each interval
+  </ParamField>
+  
+  <ParamField path="interval" type="number" required>
+    Time in milliseconds between each execution
+  </ParamField>
+  
+  <ParamField path="args" type="...any">
+    Optional arguments to pass to the callback function
+  </ParamField>
+  
+  **Returns:**
+  <ResponseField name="intervalId" type="number">
+    Interval identifier that can be used with `clearInterval()`
+  </ResponseField>
+</ResponseField>
+
+See [MDN: setInterval](https://developer.mozilla.org/en-US/docs/Web/API/setInterval) for detailed documentation.
+
+### clearInterval
+
+<ResponseField name="clearInterval(intervalId)" type="function">
+  Cancels an interval previously established by calling `setInterval()`.
+  
+  **Parameters:**
+  <ParamField path="intervalId" type="number" required>
+    The interval identifier returned by `setInterval()`
+  </ParamField>
+</ResponseField>
+
+See [MDN: clearInterval](https://developer.mozilla.org/en-US/docs/Web/API/clearInterval) for detailed documentation.
+
+## Examples
+
+### Basic Timeout Example
+
+<CodeGroup>
+```javascript Simple Delay
+export default function () {
+  console.log('Starting test...');
+  
+  setTimeout(() => {
+    console.log('This runs after 2 seconds');
+  }, 2000);
+  
+  console.log('Timeout scheduled');
+}
+```
+
+```javascript With Arguments
+export default function () {
+  setTimeout((name, iteration) => {
+    console.log(`Hello ${name}, iteration ${iteration}`);
+  }, 1000, 'k6', __ITER);
+}
+```
+</CodeGroup>
+
+### Basic Interval Example
+
+```javascript
+export default function () {
+  let count = 0;
+  
+  const intervalId = setInterval(() => {
+    count++;
+    console.log(`This runs every 200ms (count: ${count})`);
+  }, 200);
+
+  const timeoutId = setTimeout(() => {
+    console.log('Stopping interval after 2s');
+    
+    // Clear the interval and timeout to exit k6
+    clearInterval(intervalId);
+    clearTimeout(timeoutId);
+  }, 2000);
+}
+```
+
+### WebSocket Heartbeat
+
+```javascript
+import { WebSocket } from 'k6/websockets';
+
+export default function () {
+  const ws = new WebSocket('wss://echo.websocket.org');
+
+  ws.addEventListener('open', () => {
+    console.log('Connected');
+
+    // Send heartbeat every 30 seconds
+    const heartbeatId = setInterval(() => {
+      ws.send(JSON.stringify({ type: 'heartbeat' }));
+      console.log('Heartbeat sent');
+    }, 30000);
+
+    // Close connection after 2 minutes
+    setTimeout(() => {
+      clearInterval(heartbeatId);
+      ws.close();
+    }, 120000);
+  });
+
+  ws.addEventListener('close', () => {
+    console.log('Disconnected');
+  });
+}
+```
+
+### Browser Test with Timeout
+
+```javascript
+import { browser } from 'k6/browser';
+
+export const options = {
+  scenarios: {
+    browser: {
+      executor: 'shared-iterations',
+      options: {
+        browser: {
+          type: 'chromium',
+        },
+      },
+    },
+  },
+};
+
+export default async function () {
+  const page = await browser.newPage();
+
+  try {
+    await page.goto('https://test.k6.io');
+
+    // Set a timeout for a long-running operation
+    let operationComplete = false;
+
+    const timeoutId = setTimeout(() => {
+      if (!operationComplete) {
+        console.error('Operation timed out after 10 seconds');
+      }
+    }, 10000);
+
+    // Perform operation
+    await page.click('button#submit');
+    await page.waitForSelector('.result');
+    operationComplete = true;
+
+    clearTimeout(timeoutId);
+  } finally {
+    await page.close();
+  }
+}
+```
+
+### Simulating User Think Time
+
+```javascript
+import http from 'k6/http';
+import { check } from 'k6';
+
+export default function () {
+  // Make first request
+  let res = http.get('https://test.k6.io');
+  check(res, { 'status is 200': (r) => r.status === 200 });
+
+  // User reads the page for 2-5 seconds
+  const thinkTime = Math.random() * 3000 + 2000;
+  
+  let requestMade = false;
+  setTimeout(() => {
+    // User clicks a link after thinking
+    res = http.get('https://test.k6.io/news.php');
+    check(res, { 'news page loaded': (r) => r.status === 200 });
+    requestMade = true;
+  }, thinkTime);
+
+  // Wait for timeout to complete
+  // (In real tests, you'd use proper async/await or other synchronization)
+}
+```
+
+### Polling Pattern
+
+```javascript
+import http from 'k6/http';
+import { check } from 'k6';
+
+export default function () {
+  // Start a long-running operation
+  const startRes = http.post('https://api.example.com/process', {
+    data: 'large-dataset',
+  });
+  const jobId = startRes.json('jobId');
+
+  let jobComplete = false;
+  let pollCount = 0;
+  const maxPolls = 20;
+
+  // Poll for completion every 2 seconds
+  const pollId = setInterval(() => {
+    pollCount++;
+    
+    const statusRes = http.get(`https://api.example.com/status/${jobId}`);
+    const status = statusRes.json('status');
+
+    console.log(`Poll ${pollCount}: Status = ${status}`);
+
+    if (status === 'completed') {
+      console.log('Job completed!');
+      jobComplete = true;
+      clearInterval(pollId);
+    } else if (pollCount >= maxPolls) {
+      console.error('Max polls reached, job not completed');
+      clearInterval(pollId);
+    }
+  }, 2000);
+}
+```
+
+### Cancelling Timers
+
+```javascript
+export default function () {
+  console.log('Setting up timers...');
+
+  // Schedule multiple timeouts
+  const timeout1 = setTimeout(() => {
+    console.log('Timeout 1 executed');
+  }, 1000);
+
+  const timeout2 = setTimeout(() => {
+    console.log('Timeout 2 - this will be cancelled');
+  }, 2000);
+
+  const interval1 = setInterval(() => {
+    console.log('Interval running...');
+  }, 500);
+
+  // Cancel timeout2 before it executes
+  clearTimeout(timeout2);
+
+  // Stop interval after 3 seconds
+  setTimeout(() => {
+    clearInterval(interval1);
+    console.log('All timers cleaned up');
+  }, 3000);
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Always Clear Timers">
+    Always clear intervals and timeouts when they're no longer needed to prevent memory leaks and unexpected behavior.
+    
+    ```javascript
+    const intervalId = setInterval(callback, 1000);
+    // Later...
+    clearInterval(intervalId);
+    ```
+  </Accordion>
+  
+  <Accordion title="Use sleep() for Simple Delays">
+    For simple delays in the default function, use `sleep()` from `k6` instead of `setTimeout()`. It's more straightforward and doesn't require event loop handling.
+    
+    ```javascript
+    import { sleep } from 'k6';
+    
+    export default function () {
+      // Prefer this for simple delays
+      sleep(2);
+      
+      // Over this
+      setTimeout(() => { /* ... */ }, 2000);
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Event Loop Requirement">
+    Timers require an active event loop. They work best in:
+    - WebSocket tests (using `k6/websockets`)
+    - Browser tests (using `k6/browser`)
+    - Scenarios with long-running connections
+    
+    In simple HTTP tests, the default function may exit before timers fire.
+  </Accordion>
+  
+  <Accordion title="Precision Considerations">
+    Timer precision is not guaranteed. Actual execution may be delayed if:
+    - The event loop is busy
+    - System resources are limited
+    - Other operations are blocking
+    
+    Don't rely on timers for microsecond-precision timing.
+  </Accordion>
+</AccordionGroup>
+
+## Timers vs sleep()
+
+| Feature | Timers (setTimeout/setInterval) | sleep() |
+|---------|--------------------------------|----------|
+| Execution | Asynchronous (event loop) | Synchronous (blocks) |
+| Use Case | WebSocket, browser, async ops | Simple delays in HTTP tests |
+| Cancellable | Yes (clearTimeout/clearInterval) | No |
+| Multiple Actions | Yes (multiple timers) | No (one delay at a time) |
+| Event Loop Required | Yes | No |
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="sleep()" icon="bed" href="/api/sleep">
+    Simple blocking delay function
+  </Card>
+  <Card title="k6/websockets" icon="plug" href="/api/k6-websockets">
+    WebSocket API that works with timers
+  </Card>
+  <Card title="k6/browser" icon="globe" href="/api/k6-browser">
+    Browser API that uses timers
+  </Card>
+  <Card title="MDN: Timers" icon="book" href="https://developer.mozilla.org/en-US/docs/Web/API/setTimeout">
+    Browser timer API documentation
+  </Card>
+</CardGroup>

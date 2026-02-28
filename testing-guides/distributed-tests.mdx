@@ -1,0 +1,555 @@
+---
+title: Distributed Tests
+description: Run distributed k6 tests across multiple machines using the k6 Kubernetes operator for high-scale load testing
+---
+
+Distributed testing allows you to run a single k6 test across multiple machines, enabling higher load generation and testing from multiple IP addresses. This guide covers using the k6 Kubernetes operator to orchestrate distributed tests.
+
+## When to Use Distributed Tests
+
+Consider distributed testing when:
+
+<CardGroup cols={2}>
+  <Card title="High Load Requirements" icon="gauge-high">
+    A single optimized node cannot generate the load your test requires
+  </Card>
+  <Card title="Multiple IP Addresses" icon="network-wired">
+    Your system under test needs to be accessed from different IP addresses
+  </Card>
+  <Card title="Geographic Distribution" icon="globe">
+    You need to test from multiple geographic locations simultaneously
+  </Card>
+  <Card title="Kubernetes Environment" icon="dharmachakra">
+    Kubernetes is already your preferred operations environment
+  </Card>
+</CardGroup>
+
+## Introducing k6-operator
+
+The [k6-operator](https://github.com/grafana/k6-operator) is a Kubernetes operator that automates distributed k6 test execution. It defines a custom `TestRun` resource that specifies:
+
+- The k6 test script to execute
+- The number of parallel pods (`parallelism`)
+- Environment configuration
+- Resource allocation
+
+When you create a `TestRun`, the operator automatically provisions k6 test jobs across your cluster, splitting the workload using execution segments.
+
+## Getting Started
+
+### Prerequisites
+
+- Access to a Kubernetes cluster
+- `kubectl` installed and configured
+- Appropriate cluster permissions
+
+<Tip>
+You can experiment locally using [kind](https://kind.sigs.k8s.io/) or [k3d](https://k3d.io/) to run Kubernetes in Docker.
+</Tip>
+
+### Step 1: Install the Operator
+
+Install the k6-operator in your cluster:
+
+```bash
+curl https://raw.githubusercontent.com/grafana/k6-operator/main/bundle.yaml | kubectl apply -f -
+```
+
+Verify the installation:
+
+```bash
+kubectl get pod -n k6-operator-system
+```
+
+You should see:
+```
+NAME                                              READY   STATUS    RESTARTS   AGE
+k6-operator-controller-manager-7664957cf7-llw54   2/2     Running   0          160m
+```
+
+### Step 2: Create a Test Script
+
+Create your k6 test script (same as for local testing):
+
+```javascript test.js
+import http from 'k6/http';
+import { sleep } from 'k6';
+
+export const options = {
+  vus: 10,
+  duration: '10s',
+};
+
+export default function () {
+  http.get('https://test.k6.io/');
+  sleep(1);
+}
+```
+
+<Note>
+Always validate your script locally with `k6 run test.js` before deploying to Kubernetes.
+</Note>
+
+### Step 3: Add Test Script to Kubernetes
+
+You can provide test scripts to the operator using either ConfigMaps or PersistentVolumes.
+
+<Tabs>
+  <Tab title="ConfigMap (Recommended)">
+    Create a ConfigMap from your test file:
+    
+    ```bash
+    kubectl create configmap my-test --from-file test.js
+    ```
+    
+    **Limitations:** ConfigMaps have a 1 MiB size limit. For larger scripts, use PersistentVolumes.
+  </Tab>
+  
+  <Tab title="PersistentVolume">
+    For larger test suites or modular scripts:
+    
+    1. Create a PersistentVolume and PersistentVolumeClaim
+    2. Copy test scripts to the volume under `/test/` directory
+    3. Reference the claim in your TestRun
+    
+    See [Kubernetes PersistentVolumes documentation](https://kubernetes.io/docs/concepts/storage/persistent-volumes/) for details.
+  </Tab>
+</Tabs>
+
+### Step 4: Create a TestRun Resource
+
+Define a `TestRun` custom resource to execute your test:
+
+<Tabs>
+  <Tab title="From ConfigMap">
+    ```yaml run-k6-from-configmap.yaml
+    apiVersion: k6.io/v1alpha1
+    kind: TestRun
+    metadata:
+      name: run-k6-from-configmap
+    spec:
+      parallelism: 4
+      script:
+        configMap:
+          name: my-test
+          file: test.js
+    ```
+    
+    This configuration:
+    - Runs the test across 4 parallel pods
+    - Loads script from the `my-test` ConfigMap
+    - Automatically splits the workload using execution segments
+  </Tab>
+  
+  <Tab title="From PersistentVolume">
+    ```yaml run-k6-from-volume.yaml
+    apiVersion: k6.io/v1alpha1
+    kind: TestRun
+    metadata:
+      name: run-k6-from-volume
+    spec:
+      parallelism: 4
+      script:
+        volumeClaim:
+          name: my-volume-claim
+          file: test.js  # Relative to /test/ directory
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+The ConfigMap/PersistentVolumeClaim and TestRun must be in the same Kubernetes namespace.
+</Warning>
+
+## Advanced Configuration
+
+### Environment Variables
+
+Pass configuration through environment variables:
+
+```yaml
+apiVersion: k6.io/v1alpha1
+kind: TestRun
+metadata:
+  name: run-k6-with-vars
+spec:
+  parallelism: 4
+  script:
+    configMap:
+      name: my-test
+      file: test.js
+  runner:
+    env:
+      - name: TARGET_URL
+        value: 'https://test.k6.io'
+      - name: VUS
+        value: '50'
+    envFrom:
+      - configMapRef:
+          name: my-config-vars
+      - secretRef:
+          name: my-secrets
+```
+
+Use in your test script:
+
+```javascript
+const baseUrl = __ENV.TARGET_URL || 'https://default.com';
+const vus = __ENV.VUS || 10;
+
+export const options = {
+  vus: parseInt(vus),
+  duration: '30s',
+};
+
+export default function () {
+  http.get(baseUrl);
+}
+```
+
+### Command-Line Arguments
+
+Pass k6 options via command-line arguments:
+
+```yaml
+apiVersion: k6.io/v1alpha1
+kind: TestRun
+metadata:
+  name: run-k6-with-args
+spec:
+  parallelism: 4
+  script:
+    configMap:
+      name: my-test
+      file: test.js
+  arguments: --tag testid=distributed-001 --log-format json --out experimental-prometheus-rw
+```
+
+### Resource Limits
+
+Control pod resources:
+
+```yaml
+apiVersion: k6.io/v1alpha1
+kind: TestRun
+metadata:
+  name: run-k6-with-resources
+spec:
+  parallelism: 4
+  script:
+    configMap:
+      name: my-test
+      file: test.js
+  runner:
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+      requests:
+        cpu: 500m
+        memory: 512Mi
+```
+
+### Automatic Cleanup
+
+Automatically remove test resources after completion:
+
+```yaml
+apiVersion: k6.io/v1alpha1
+kind: TestRun
+metadata:
+  name: run-k6-with-cleanup
+spec:
+  parallelism: 4
+  cleanup: post  # Remove all resources after test completes
+  script:
+    configMap:
+      name: my-test
+      file: test.js
+  arguments: -o experimental-prometheus-rw
+```
+
+<Tip>
+Use `cleanup: post` when outputting to real-time services like Prometheus, Grafana Cloud k6, or other external outputs.
+</Tip>
+
+## Running Tests
+
+<Steps>
+  <Step title="Apply the TestRun">
+    Deploy your test configuration:
+    
+    ```bash
+    kubectl apply -f run-k6-from-configmap.yaml
+    ```
+  </Step>
+  
+  <Step title="Monitor execution">
+    Watch test progress:
+    
+    ```bash
+    # Watch pods
+    kubectl get pods -w
+    
+    # View test logs
+    kubectl logs -f <pod-name>
+    
+    # Check TestRun status
+    kubectl get testrun run-k6-from-configmap
+    ```
+  </Step>
+  
+  <Step title="Clean up resources">
+    After the test completes:
+    
+    ```bash
+    kubectl delete -f run-k6-from-configmap.yaml
+    ```
+    
+    Or use `cleanup: post` in the TestRun spec for automatic cleanup.
+  </Step>
+</Steps>
+
+## Complete Example
+
+Here's a comprehensive distributed test setup:
+
+```yaml distributed-load-test.yaml
+apiVersion: k6.io/v1alpha1
+kind: TestRun
+metadata:
+  name: distributed-load-test
+spec:
+  parallelism: 8  # Split across 8 pods
+  cleanup: post
+  script:
+    configMap:
+      name: load-test-script
+      file: test.js
+  arguments: |
+    --tag testid=distributed-load-001
+    --out experimental-prometheus-rw
+    --log-format json
+  runner:
+    env:
+      - name: K6_PROMETHEUS_RW_SERVER_URL
+        value: 'http://prometheus:9090/api/v1/write'
+      - name: TARGET_VUS
+        value: '800'
+      - name: TEST_DURATION
+        value: '5m'
+    envFrom:
+      - secretRef:
+          name: api-credentials
+    resources:
+      limits:
+        cpu: 2000m
+        memory: 2Gi
+      requests:
+        cpu: 1000m
+        memory: 1Gi
+```
+
+Corresponding test script:
+
+```javascript test.js
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+import { Rate } from 'k6/metrics';
+
+const errorRate = new Rate('errors');
+
+export const options = {
+  stages: [
+    { duration: '1m', target: parseInt(__ENV.TARGET_VUS) * 0.5 },
+    { duration: __ENV.TEST_DURATION, target: parseInt(__ENV.TARGET_VUS) },
+    { duration: '1m', target: 0 },
+  ],
+  thresholds: {
+    http_req_duration: ['p(95)<500'],
+    errors: ['rate<0.01'],
+  },
+};
+
+export default function () {
+  const res = http.get(__ENV.TARGET_URL || 'https://test.k6.io');
+  
+  const success = check(res, {
+    'status is 200': (r) => r.status === 200,
+  });
+  
+  errorRate.add(!success);
+  sleep(1);
+}
+```
+
+## Monitoring Distributed Tests
+
+### Using Prometheus
+
+```yaml
+apiVersion: k6.io/v1alpha1
+kind: TestRun
+metadata:
+  name: monitored-test
+spec:
+  parallelism: 4
+  cleanup: post
+  script:
+    configMap:
+      name: my-test
+      file: test.js
+  arguments: --out experimental-prometheus-rw
+  runner:
+    env:
+      - name: K6_PROMETHEUS_RW_SERVER_URL
+        value: 'http://prometheus-server:9090/api/v1/write'
+      - name: K6_PROMETHEUS_RW_TREND_AS_NATIVE_HISTOGRAM
+        value: 'true'
+```
+
+### Using Grafana Cloud k6
+
+```yaml
+apiVersion: k6.io/v1alpha1
+kind: TestRun
+metadata:
+  name: cloud-monitored-test
+spec:
+  parallelism: 4
+  cleanup: post
+  script:
+    configMap:
+      name: my-test
+      file: test.js
+  arguments: --out cloud
+  runner:
+    envFrom:
+      - secretRef:
+          name: k6-cloud-token
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Pods not starting">
+    Check pod events and logs:
+    
+    ```bash
+    kubectl describe pod <pod-name>
+    kubectl logs <pod-name>
+    ```
+    
+    Common issues:
+    - ConfigMap not found in namespace
+    - Insufficient cluster resources
+    - Image pull errors
+  </Accordion>
+  
+  <Accordion title="Test execution errors">
+    View test runner logs:
+    
+    ```bash
+    kubectl logs -l k6_cr=<testrun-name>
+    ```
+    
+    Check for:
+    - Script errors (syntax, logic)
+    - Network connectivity issues
+    - Resource constraints
+  </Accordion>
+  
+  <Accordion title="Workload not splitting correctly">
+    Verify execution segments:
+    
+    ```bash
+    # Check if pods are using different segments
+    kubectl logs <pod-name> | grep segment
+    ```
+    
+    Ensure `parallelism` is set correctly in the TestRun spec.
+  </Accordion>
+  
+  <Accordion title="Results not aggregating">
+    For distributed tests, use external outputs:
+    - Prometheus Remote Write
+    - Grafana Cloud k6
+    - InfluxDB
+    - Other supported outputs
+    
+    Local console output won't aggregate across pods.
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Test Locally First" icon="flask">
+    Always validate scripts with `k6 run` before deploying to Kubernetes
+  </Card>
+  <Card title="Use External Outputs" icon="chart-line">
+    Configure real-time outputs for aggregated metrics across all pods
+  </Card>
+  <Card title="Set Resource Limits" icon="gauge">
+    Define appropriate CPU and memory limits to prevent cluster overload
+  </Card>
+  <Card title="Enable Cleanup" icon="broom">
+    Use `cleanup: post` to automatically remove completed test resources
+  </Card>
+  <Card title="Monitor During Tests" icon="eye">
+    Watch pod logs and metrics in real-time to catch issues early
+  </Card>
+  <Card title="Version Test Scripts" icon="code-branch">
+    Store test scripts in version control and use ConfigMaps for deployment
+  </Card>
+</CardGroup>
+
+## Example: High-Scale Distributed Test
+
+```yaml high-scale-test.yaml
+apiVersion: k6.io/v1alpha1
+kind: TestRun
+metadata:
+  name: high-scale-test
+spec:
+  parallelism: 20  # 20 pods for maximum distribution
+  cleanup: post
+  script:
+    volumeClaim:
+      name: test-scripts-pvc
+      file: high-scale-test.js
+  arguments: |
+    --out experimental-prometheus-rw
+    --tag environment=staging
+    --tag test=high-scale
+    --summary-trend-stats="min,avg,med,p(90),p(95),p(99),max"
+  runner:
+    env:
+      - name: K6_PROMETHEUS_RW_SERVER_URL
+        valueFrom:
+          configMapKeyRef:
+            name: monitoring-config
+            key: prometheus-url
+      - name: TEST_VUS
+        value: '10000'  # 10k VUs distributed across 20 pods
+      - name: TEST_DURATION
+        value: '30m'
+    resources:
+      limits:
+        cpu: 4000m
+        memory: 4Gi
+      requests:
+        cpu: 2000m
+        memory: 2Gi
+```
+
+<Note>
+With `parallelism: 20` and `TEST_VUS: 10000`, each pod will run ~500 VUs. Adjust based on your pod resource limits and cluster capacity.
+</Note>
+
+## Next Steps
+
+- Learn about [k6 scenarios](/using-k6/scenarios) for advanced execution control
+- Explore [k6 outputs](/results-output/overview) for metrics storage
+- Check the [k6-operator documentation](https://github.com/grafana/k6-operator) for advanced features
+- Join the [k6 Community Forum](https://community.grafana.com/c/grafana-k6/k6-operator/73) for help and discussions

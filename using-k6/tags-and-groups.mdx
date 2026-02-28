@@ -1,0 +1,410 @@
+---
+title: 'Tags and Groups'
+description: 'Organize and filter k6 test results using tags and groups to analyze performance by request type, endpoint, or test section.'
+---
+
+Tags and groups help you organize k6 test results for better analysis. They let you categorize metrics, filter results, and structure your tests logically.
+
+## What are tags?
+
+Tags are key-value pairs attached to metrics, checks, and requests. They enable you to:
+
+- Filter metrics by request type, endpoint, or custom criteria
+- Set thresholds for specific tagged metrics
+- Analyze results by different dimensions
+- Compare performance across different parts of your test
+
+k6 provides two types of tags:
+
+<CardGroup cols={2}>
+  <Card title="System tags" icon="microchip">
+    Automatically added by k6
+    
+    Examples: `status`, `method`, `url`
+  </Card>
+  
+  <Card title="User-defined tags" icon="user">
+    Custom tags you add to your test
+    
+    Examples: `endpoint`, `type`, `priority`
+  </Card>
+</CardGroup>
+
+## System tags
+
+k6 automatically tags metrics with system-defined metadata:
+
+| Tag | Description | Example |
+|-----|-------------|--------|
+| `status` | HTTP status code | `200`, `404`, `500` |
+| `method` | HTTP method | `GET`, `POST`, `PUT` |
+| `url` | Request URL | `http://test.k6.io` |
+| `name` | Request name | `http://test.k6.io` |
+| `group` | Group path | `::login::submit` |
+| `scenario` | Scenario name | `default` |
+| `expected_response` | Expected response flag | `true`, `false` |
+| `proto` | Protocol version | `HTTP/1.1`, `HTTP/2` |
+| `error` | Error message | Network error string |
+| `tls_version` | TLS version | `tls1.2`, `tls1.3` |
+
+### Optional system tags
+
+These tags are disabled by default but can be enabled:
+
+| Tag | Description |
+|-----|-------------|
+| `vu` | Virtual user ID |
+| `iter` | Iteration number |
+| `ip` | Remote server IP |
+| `ocsp_status` | OCSP status |
+
+Enable them using the `systemTags` option:
+
+```javascript
+export const options = {
+  systemTags: ['status', 'method', 'url', 'vu', 'iter'],
+};
+```
+
+## User-defined tags
+
+Add custom tags to requests, checks, and metrics:
+
+### Tag HTTP requests
+
+```javascript
+import http from 'k6/http';
+
+export default function () {
+  http.get('https://quickpizza.grafana.com/', {
+    tags: {
+      type: 'homepage',
+      priority: 'critical',
+    },
+  });
+}
+```
+
+### Tag checks
+
+```javascript
+import http from 'k6/http';
+import { check } from 'k6';
+
+export default function () {
+  const res = http.get('https://quickpizza.grafana.com/');
+  
+  check(
+    res,
+    { 'status is 200': (r) => r.status === 200 },
+    { check_type: 'critical' }
+  );
+}
+```
+
+### Tag custom metrics
+
+```javascript
+import http from 'k6/http';
+import { Trend } from 'k6/metrics';
+
+const apiDuration = new Trend('api_duration');
+
+export default function () {
+  const res = http.get('https://quickpizza.grafana.com/api/pizzas');
+  
+  apiDuration.add(res.timings.duration, {
+    endpoint: '/api/pizzas',
+    version: 'v1',
+  });
+}
+```
+
+## Test-wide tags
+
+Set tags that apply to all metrics in your test:
+
+<Tabs>
+  <Tab title="In script">
+    ```javascript
+    export const options = {
+      tags: {
+        environment: 'production',
+        team: 'backend',
+        version: '1.2.3',
+      },
+    };
+    ```
+  </Tab>
+  
+  <Tab title="CLI flags">
+    ```bash
+    k6 run --tag environment=staging --tag team=frontend script.js
+    ```
+  </Tab>
+</Tabs>
+
+Test-wide tags are useful for:
+- Comparing results across test runs
+- Filtering results in monitoring systems
+- Organizing tests by environment or team
+
+## Thresholds on tagged metrics
+
+Set different thresholds for different tagged requests:
+
+```javascript
+import http from 'k6/http';
+import { sleep } from 'k6';
+
+export const options = {
+  thresholds: {
+    'http_req_duration{type:API}': ['p(95)<500'],
+    'http_req_duration{type:static}': ['p(95)<200'],
+  },
+};
+
+export default function () {
+  // API requests
+  http.get('https://quickpizza.grafana.com/api/pizzas', {
+    tags: { type: 'API' },
+  });
+  
+  // Static content
+  http.get('https://quickpizza.grafana.com/favicon.ico', {
+    tags: { type: 'static' },
+  });
+  
+  sleep(1);
+}
+```
+
+This allows different performance requirements for different request types.
+
+## Groups
+
+Groups organize test code into logical sections and automatically tag all operations within them.
+
+### Basic groups
+
+```javascript
+import http from 'k6/http';
+import { group, sleep } from 'k6';
+
+export default function () {
+  group('visit product listing', function () {
+    http.get('https://example.com/products');
+  });
+  
+  group('add to cart', function () {
+    http.post('https://example.com/cart', {});
+  });
+  
+  group('checkout', function () {
+    http.post('https://example.com/checkout', {});
+  });
+  
+  sleep(1);
+}
+```
+
+All requests within a group are automatically tagged with `group` tag.
+
+### Nested groups
+
+Groups can be nested for hierarchical organization:
+
+```javascript
+import http from 'k6/http';
+import { group } from 'k6';
+
+export default function () {
+  group('user workflow', function () {
+    group('login', function () {
+      http.get('https://example.com/login');
+      http.post('https://example.com/auth', {});
+    });
+    
+    group('browse', function () {
+      http.get('https://example.com/products');
+    });
+  });
+}
+```
+
+The `group` tag shows the full path: `::user workflow::login`
+
+### Group duration metric
+
+k6 automatically creates a `group_duration` metric for each group:
+
+```javascript
+import http from 'k6/http';
+import { group } from 'k6';
+
+export const options = {
+  thresholds: {
+    'group_duration{group:::login}': ['avg<1000'],
+    'group_duration{group:::checkout}': ['avg<2000'],
+  },
+};
+
+export default function () {
+  group('login', function () {
+    http.get('https://example.com/login');
+    http.post('https://example.com/auth', {});
+  });
+  
+  group('checkout', function () {
+    http.post('https://example.com/checkout', {});
+  });
+}
+```
+
+## Dynamic tags from code
+
+Set tags dynamically during test execution:
+
+```javascript
+import http from 'k6/http';
+import exec from 'k6/execution';
+import { group } from 'k6';
+
+export const options = {
+  thresholds: {
+    'http_reqs{container_group:main}': ['count==3'],
+  },
+};
+
+export default function () {
+  // Set dynamic tag
+  exec.vu.tags.containerGroup = 'main';
+  
+  group('main', function () {
+    http.get('https://test.k6.io');
+    
+    group('sub', function () {
+      http.get('https://quickpizza.grafana.com/');
+    });
+    
+    http.get('https://quickpizza.grafana.com/api/headers');
+  });
+  
+  // Remove tag
+  delete exec.vu.tags.containerGroup;
+  
+  http.get('https://quickpizza.grafana.com/api/delay/3');
+}
+```
+
+## Tagging stages
+
+Use helper functions to tag operations by their test stage:
+
+```javascript
+import http from 'k6/http';
+import { tagWithCurrentStageIndex } from 'https://jslib.k6.io/k6-utils/1.3.0/index.js';
+
+export const options = {
+  stages: [
+    { target: 5, duration: '2s' },
+    { target: 10, duration: '5s' },
+  ],
+};
+
+export default function () {
+  tagWithCurrentStageIndex();
+  
+  // All requests tagged with current stage index
+  http.get('https://test.k6.io'); // {stage: "0"} or {stage: "1"}
+}
+```
+
+## Complete example
+
+Here's a comprehensive example using tags and groups:
+
+```javascript
+import http from 'k6/http';
+import { check, group, sleep } from 'k6';
+import { Trend } from 'k6/metrics';
+
+const apiDuration = new Trend('api_duration');
+
+export const options = {
+  vus: 10,
+  duration: '30s',
+  
+  // Test-wide tags
+  tags: {
+    environment: 'production',
+    test_type: 'load',
+  },
+  
+  // Thresholds using tags
+  thresholds: {
+    'http_req_duration{type:api}': ['p(95)<500'],
+    'http_req_duration{type:static}': ['p(95)<100'],
+    'group_duration{group:::API Calls}': ['avg<400'],
+    'checks{critical:true}': ['rate>0.99'],
+  },
+};
+
+const baseUrl = 'https://quickpizza.grafana.com';
+
+export default function () {
+  group('Homepage', function () {
+    const res = http.get(baseUrl, {
+      tags: { type: 'static', page: 'home' },
+    });
+    
+    check(
+      res,
+      { 'status is 200': (r) => r.status === 200 },
+      { critical: 'true' }
+    );
+  });
+  
+  group('API Calls', function () {
+    const res = http.get(`${baseUrl}/api/pizzas`, {
+      tags: { type: 'api', endpoint: '/pizzas' },
+    });
+    
+    apiDuration.add(res.timings.duration, {
+      endpoint: '/pizzas',
+    });
+    
+    check(
+      res,
+      { 'api status is 200': (r) => r.status === 200 },
+      { critical: 'true' }
+    );
+  });
+  
+  sleep(1);
+}
+```
+
+## Best practices
+
+<CardGroup cols={2}>
+  <Card title="Use descriptive tag names" icon="tag">
+    Make tag names clear and consistent across your tests.
+  </Card>
+  
+  <Card title="Tag by request type" icon="layer-group">
+    Separate API, static content, and other request types with tags.
+  </Card>
+  
+  <Card title="Group logical workflows" icon="diagram-project">
+    Use groups to organize user journeys and workflows.
+  </Card>
+  
+  <Card title="Set thresholds per tag" icon="bullseye">
+    Define different performance requirements for different request types.
+  </Card>
+</CardGroup>
+
+<Warning>
+  **Avoid one group per request.** Wrapping every request in a group adds unnecessary complexity. Use groups for logical sections, not individual requests.
+</Warning>

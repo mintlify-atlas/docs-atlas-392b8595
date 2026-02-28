@@ -1,0 +1,175 @@
+---
+title: k6/encoding
+description: Encoding utilities for base64 encoding and decoding
+---
+
+The k6/encoding module provides base64 encoding and decoding functionality as defined by RFC4648.
+
+## Import
+
+```javascript
+import encoding from 'k6/encoding';
+```
+
+## Functions
+
+### b64encode()
+
+Encodes data in base64 format.
+
+<ParamField path="input" type="string | ArrayBuffer" required>
+  The input string or ArrayBuffer object to base64 encode.
+</ParamField>
+
+<ParamField path="encoding" type="string" default="std">
+  The base64 encoding to use:
+  - `"std"` - Standard encoding with `=` padding and `+`/`/` characters (default)
+  - `"rawstd"` - Standard encoding without `=` padding
+  - `"url"` - URL-safe encoding with `-`/`_` instead of `+`/`/`
+  - `"rawurl"` - URL-safe encoding without `=` padding
+</ParamField>
+
+<ResponseField name="return" type="string">
+  The base64 encoding of the input data.
+</ResponseField>
+
+<CodeGroup>
+```javascript String encoding
+import { check } from 'k6';
+import encoding from 'k6/encoding';
+
+export default function () {
+  const str = 'hello world';
+  const enc = 'aGVsbG8gd29ybGQ=';
+  check(null, {
+    'is encoding string correct': () => encoding.b64encode(str) === enc,
+  });
+}
+```
+
+```javascript ArrayBuffer encoding
+import { check } from 'k6';
+import encoding from 'k6/encoding';
+
+export default function () {
+  const buf = new Uint8Array([104, 101, 108, 108, 111, 32, 119, 111, 114, 108, 100]).buffer;
+  const enc = 'aGVsbG8gd29ybGQ=';
+  check(null, {
+    'is encoding ArrayBuffer correct': () => encoding.b64encode(buf) === enc,
+  });
+}
+```
+
+```javascript URL-safe encoding
+import encoding from 'k6/encoding';
+
+export default function () {
+  const str = 'hello world!';
+  const urlSafe = encoding.b64encode(str, 'url');
+  console.log(urlSafe); // aGVsbG8gd29ybGQh
+}
+```
+</CodeGroup>
+
+---
+
+### b64decode()
+
+Decodes a base64 encoded string into the original unencoded input.
+
+<ParamField path="input" type="string" required>
+  The string to base64 decode.
+</ParamField>
+
+<ParamField path="encoding" type="string" default="std">
+  The base64 encoding to use:
+  - `"std"` - Standard encoding with `=` padding and `+`/`/` characters (default)
+  - `"rawstd"` - Standard encoding without `=` padding
+  - `"url"` - URL-safe encoding with `-`/`_` instead of `+`/`/`
+  - `"rawurl"` - URL-safe encoding without `=` padding
+</ParamField>
+
+<ParamField path="format" type="string">
+  Output format:
+  - `"s"` - Return as string
+  - Unspecified - Return as ArrayBuffer (default)
+</ParamField>
+
+<ResponseField name="return" type="ArrayBuffer | string">
+  The base64 decoded version of the input in either string or ArrayBuffer format.
+</ResponseField>
+
+<CodeGroup>
+```javascript Decode to string
+import { check } from 'k6';
+import encoding from 'k6/encoding';
+
+export default function () {
+  const str = 'hello world';
+  const enc = 'aGVsbG8gd29ybGQ=';
+  check(null, {
+    'is decoding to string correct': () => encoding.b64decode(enc, 'std', 's') === str,
+  });
+}
+```
+
+```javascript Decode to ArrayBuffer
+import { check } from 'k6';
+import encoding from 'k6/encoding';
+
+export default function () {
+  const enc = 'aGVsbG8gd29ybGQ=';
+  const expBin = new Uint8Array([104, 101, 108, 108, 111, 32, 119, 111, 114, 108, 100]);
+  
+  check(null, {
+    'is decoding to ArrayBuffer correct': () => {
+      const decBin = new Uint8Array(encoding.b64decode(enc));
+      if (decBin.length != expBin.length) return false;
+      for (let i = 0; i < decBin.length; i++) {
+        if (decBin[i] !== expBin[i]) return false;
+      }
+      return true;
+    },
+  });
+}
+```
+
+```javascript URL-safe decode
+import encoding from 'k6/encoding';
+
+export default function () {
+  const urlEncoded = 'aGVsbG8gd29ybGQh';
+  const decoded = encoding.b64decode(urlEncoded, 'url', 's');
+  console.log(decoded); // hello world!
+}
+```
+</CodeGroup>
+
+## Encoding Types
+
+<CardGroup cols={2}>
+  <Card title="Standard (std)" icon="text">
+    Default base64 encoding with `=` padding characters and `+`/`/` in the alphabet.
+  </Card>
+  <Card title="Raw Standard (rawstd)" icon="text">
+    Standard encoding without `=` padding characters.
+  </Card>
+  <Card title="URL-safe (url)" icon="link">
+    URL-safe encoding using `-` and `_` instead of `+` and `/`, with padding.
+  </Card>
+  <Card title="Raw URL-safe (rawurl)" icon="link">
+    URL-safe encoding without `=` padding characters.
+  </Card>
+</CardGroup>
+
+## Use Cases
+
+- Encoding binary data for HTTP headers or URLs
+- Encoding authentication credentials (Basic Auth)
+- Working with Base64-encoded API payloads
+- Converting between binary and text representations
+- Handling file uploads as base64 strings
+
+<Info>
+Use URL-safe encoding (`url` or `rawurl`) when the encoded data will be used in URLs or filenames to avoid special characters.
+</Info>

@@ -1,0 +1,425 @@
+---
+title: xk6-disruptor
+description: Inject faults into Kubernetes applications for chaos engineering and resilience testing
+icon: bolt
+---
+
+[xk6-disruptor](https://github.com/grafana/xk6-disruptor) is a k6 extension that adds fault injection capabilities to test the reliability of applications under turbulent conditions.
+
+## Overview
+
+xk6-disruptor implements the principles of Chaos Engineering to test how your applications handle:
+
+- Network delays and latency
+- HTTP and gRPC errors
+- Service degradation
+- Partial failures
+
+Key features:
+
+- **Everything as code** - Write fault injection tests in JavaScript alongside your performance tests
+- **Fast to adopt** - No need to deploy and maintain a fleet of agents or operators
+- **Easy to integrate** - Works seamlessly with other k6 tests
+
+## Capabilities
+
+Currently, the disruptor is designed for applications running in **Kubernetes**. Other platforms are not supported at this time.
+
+The extension provides a JavaScript API to inject different faults in HTTP and gRPC requests:
+
+- **Error injection** - Return specific HTTP status codes or gRPC error codes
+- **Delay injection** - Add latency to requests
+- **Target selection** - Inject faults into specific Pods or Services
+
+## Use cases
+
+xk6-disruptor helps you test application resilience:
+
+<CardGroup cols={2}>
+  <Card title="Resilience policies" icon="shield">
+    Test backoff, timeouts, retries, and circuit breakers
+  </Card>
+  
+  <Card title="Fallback functionality" icon="route">
+    Verify graceful degradation when dependencies fail
+  </Card>
+  
+  <Card title="SLO validation" icon="gauge">
+    Test SLOs under common internal failures
+  </Card>
+  
+  <Card title="Performance under stress" icon="bolt">
+    Measure application performance with injected delays
+  </Card>
+</CardGroup>
+
+<Note>
+The disruptor focuses on reproducing the **side effects** of failures (errors, delays) rather than root causes (failed instances, resource exhaustion). This makes tests repeatable and predictable while limiting their blast radius.
+</Note>
+
+## Installation
+
+There are three ways to use xk6-disruptor:
+
+### Download a release binary
+
+The quickest way to get started:
+
+```bash
+curl -L https://github.com/grafana/xk6-disruptor/releases/latest/download/xk6-disruptor-linux-amd64.tar.gz | tar xvz
+```
+
+[View all releases](https://github.com/grafana/xk6-disruptor/releases)
+
+### Build from source with Go
+
+<Steps>
+  <Step title="Install prerequisites">
+    Ensure you have [Go 1.19+](https://golang.org/doc/install) and [Git](https://git-scm.com/) installed.
+  </Step>
+  
+  <Step title="Install xk6">
+    ```bash
+    go install go.k6.io/xk6/cmd/xk6@latest
+    ```
+  </Step>
+  
+  <Step title="Clone and build">
+    ```bash
+    git clone https://github.com/grafana/xk6-disruptor.git
+    cd xk6-disruptor
+    xk6 build --output xk6-disruptor --with github.com/grafana/xk6-disruptor=.
+    ```
+  </Step>
+</Steps>
+
+This creates an `xk6-disruptor` binary in the current directory.
+
+### Build with Docker
+
+```bash
+docker run --rm -u "$(id -u):$(id -g)" -v "${PWD}:/xk6" grafana/xk6 build \
+  --with github.com/grafana/xk6-disruptor@latest
+```
+
+## Quick start
+
+Here's a simple example that injects faults into a Kubernetes service:
+
+```javascript
+import { ServiceDisruptor } from 'k6/x/disruptor';
+
+export default function () {
+  // Create a disruptor targeting a service
+  const disruptor = new ServiceDisruptor('app-service', 'app-namespace');
+
+  // Inject HTTP faults: 500ms delay and 10% error rate
+  const fault = {
+    averageDelay: '500ms',
+    errorRate: 0.1,
+    errorCode: 500,
+  };
+  
+  disruptor.injectHTTPFaults(fault, '30s');
+}
+```
+
+Run the test:
+
+```bash
+./xk6-disruptor run script.js
+```
+
+## API overview
+
+xk6-disruptor provides two main disruptor types:
+
+### ServiceDisruptor
+
+Targets a Kubernetes Service and all its backend Pods:
+
+```javascript
+import { ServiceDisruptor } from 'k6/x/disruptor';
+
+export default function () {
+  const disruptor = new ServiceDisruptor('my-service', 'my-namespace');
+  
+  // Inject faults for 30 seconds
+  disruptor.injectHTTPFaults(
+    {
+      averageDelay: '100ms',
+      errorRate: 0.05,
+      errorCode: 503,
+    },
+    '30s'
+  );
+}
+```
+
+### PodDisruptor
+
+Targets specific Pods matching a selector:
+
+```javascript
+import { PodDisruptor } from 'k6/x/disruptor';
+
+export default function () {
+  const selector = {
+    namespace: 'my-namespace',
+    select: {
+      labels: {
+        app: 'my-app',
+      },
+    },
+  };
+  
+  const disruptor = new PodDisruptor(selector);
+  
+  // Inject gRPC faults
+  disruptor.injectGrpcFaults(
+    {
+      averageDelay: '200ms',
+      errorRate: 0.1,
+      statusCode: 14, // UNAVAILABLE
+    },
+    '1m'
+  );
+}
+```
+
+## Fault types
+
+Both HTTP and gRPC fault injection support:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `averageDelay` | string | Average delay to add (e.g., '100ms', '1s') |
+| `delayVariation` | string | Variation in delay (e.g., '50ms') |
+| `errorRate` | number | Fraction of requests to fail (0.0 to 1.0) |
+| `errorCode` | number | HTTP status code or gRPC status code |
+| `port` | number | Target port (optional) |
+| `exclude` | string | Path/method regex to exclude (optional) |
+
+**Example with all options:**
+
+```javascript
+const fault = {
+  averageDelay: '100ms',
+  delayVariation: '50ms',  // Delays between 50ms and 150ms
+  errorRate: 0.1,          // 10% of requests fail
+  errorCode: 503,
+  port: 8080,
+  exclude: '/health',      // Don't inject faults on health checks
+};
+
+disruptor.injectHTTPFaults(fault, '1m');
+```
+
+## Combining with load tests
+
+xk6-disruptor works seamlessly with k6 load testing:
+
+```javascript
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+import { ServiceDisruptor } from 'k6/x/disruptor';
+
+export const options = {
+  scenarios: {
+    load: {
+      executor: 'constant-vus',
+      vus: 10,
+      duration: '2m',
+    },
+    disrupt: {
+      executor: 'shared-iterations',
+      vus: 1,
+      iterations: 1,
+      exec: 'injectFaults',
+    },
+  },
+};
+
+// Main load test
+export default function () {
+  const res = http.get('http://my-service.my-namespace.svc.cluster.local');
+  check(res, {
+    'status is 200': (r) => r.status === 200,
+    'response time < 500ms': (r) => r.timings.duration < 500,
+  });
+  sleep(1);
+}
+
+// Fault injection scenario
+export function injectFaults() {
+  const disruptor = new ServiceDisruptor('my-service', 'my-namespace');
+  
+  // Wait for load test to ramp up
+  sleep(30);
+  
+  // Inject faults for 1 minute
+  disruptor.injectHTTPFaults(
+    {
+      averageDelay: '200ms',
+      errorRate: 0.2,
+      errorCode: 500,
+    },
+    '1m'
+  );
+}
+```
+
+## Requirements
+
+To use xk6-disruptor, you need:
+
+- **Kubernetes cluster** - Access to a Kubernetes cluster (1.23+)
+- **kubectl access** - Configured kubeconfig with permissions to:
+  - Create/delete Pods
+  - Read Services and Pods
+  - Execute commands in Pods
+- **Network policies** - Cluster must allow Pod-to-Pod communication
+
+## Interactive demo
+
+Try xk6-disruptor without any setup:
+
+[Launch interactive demo on Killercoda](https://killercoda.com/grafana-xk6-disruptor/scenario/killercoda)
+
+The demo provides a fully configured environment with a sample application.
+
+## Learn more
+
+<CardGroup cols={2}>
+  <Card title="GitHub Repository" icon="github" href="https://github.com/grafana/xk6-disruptor">
+    Source code and detailed documentation
+  </Card>
+  
+  <Card title="Roadmap" icon="map" href="https://github.com/grafana/xk6-disruptor/blob/main/ROADMAP.md">
+    Upcoming features and enhancements
+  </Card>
+  
+  <Card title="Contributing" icon="code-pull-request" href="https://github.com/grafana/xk6-disruptor/blob/main/docs/01-development/01-contributing.md">
+    Contribute to the project
+  </Card>
+  
+  <Card title="Blog: Fault Injection" icon="newspaper" href="https://k6.io/blog/democratize-chaos-testing/">
+    Learn about fault injection principles
+  </Card>
+</CardGroup>
+
+## Examples
+
+### Test retry logic
+
+```javascript
+import { ServiceDisruptor } from 'k6/x/disruptor';
+
+export default function () {
+  const disruptor = new ServiceDisruptor('api-service', 'production');
+  
+  // Inject 50% error rate to test retry mechanisms
+  disruptor.injectHTTPFaults(
+    {
+      errorRate: 0.5,
+      errorCode: 503,
+    },
+    '1m'
+  );
+}
+```
+
+### Test timeout handling
+
+```javascript
+import { ServiceDisruptor } from 'k6/x/disruptor';
+
+export default function () {
+  const disruptor = new ServiceDisruptor('slow-service', 'default');
+  
+  // Add significant delay to trigger timeouts
+  disruptor.injectHTTPFaults(
+    {
+      averageDelay: '5s',
+      delayVariation: '1s',
+    },
+    '2m'
+  );
+}
+```
+
+### Progressive fault injection
+
+```javascript
+import { ServiceDisruptor } from 'k6/x/disruptor';
+import { sleep } from 'k6';
+
+export default function () {
+  const disruptor = new ServiceDisruptor('my-service', 'default');
+  
+  // Start with small delays
+  disruptor.injectHTTPFaults({ averageDelay: '50ms' }, '30s');
+  sleep(30);
+  
+  // Increase to moderate delays
+  disruptor.injectHTTPFaults({ averageDelay: '200ms' }, '30s');
+  sleep(30);
+  
+  // Add errors
+  disruptor.injectHTTPFaults(
+    {
+      averageDelay: '200ms',
+      errorRate: 0.1,
+      errorCode: 500,
+    },
+    '30s'
+  );
+}
+```
+
+## Troubleshooting
+
+### Check cluster connectivity
+
+```bash
+kubectl get pods -n my-namespace
+```
+
+### Verify permissions
+
+```bash
+kubectl auth can-i create pods
+kubectl auth can-i exec pods
+```
+
+### Debug disruptor issues
+
+Enable debug logging in your test:
+
+```javascript
+import { ServiceDisruptor } from 'k6/x/disruptor';
+
+export const options = {
+  logLevel: 'debug',
+};
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Build Custom Binary" icon="box" href="/extensions/bundle">
+    Bundle xk6-disruptor with other extensions
+  </Card>
+  
+  <Card title="Explore Extensions" icon="compass" href="/extensions/explore">
+    Discover more k6 extensions
+  </Card>
+  
+  <Card title="Browser Extension" icon="browser" href="/extensions/browser">
+    Add browser testing to your suite
+  </Card>
+  
+  <Card title="Community Forum" icon="users" href="https://community.grafana.com/c/grafana-k6/extensions/82">
+    Get help and share experiences
+  </Card>
+</CardGroup>

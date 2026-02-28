@@ -1,0 +1,336 @@
+---
+title: Create a k6 Extension
+description: Build custom k6 extensions in Go to add JavaScript APIs, output formats, secret sources, or CLI commands
+icon: hammer
+---
+
+If you find a gap in your testing process that no k6 extension can fix, consider building your own extension.
+
+## Before you begin
+
+Anyone who can use the command line to edit files and install software should be able to follow along. However, if you want to create an extension for production use, you should have:
+
+- Familiarity with both Go (Golang) and JavaScript, and their tooling
+- Understanding of how the [Go-to-JavaScript bridge](https://grafana.com/docs/k6/latest/extensions/explanations/go-js-bridge) works within k6
+
+### Prerequisites
+
+Install the required tools:
+
+<Steps>
+  <Step title="Install Go">
+    Download and install [Go](https://golang.org/doc/install) (version 1.19 or higher).
+  </Step>
+  
+  <Step title="Install Git">
+    Install [Git](https://git-scm.com/) for version control.
+  </Step>
+  
+  <Step title="Install xk6">
+    Install the xk6 extension builder:
+    
+    ```bash
+    go install go.k6.io/xk6/cmd/xk6@latest
+    ```
+  </Step>
+</Steps>
+
+Verify your installation:
+
+```bash
+xk6 version
+```
+
+## Avoid unneeded work
+
+Before creating a new extension:
+
+- **Check existing extensions** - Review the [Extensions catalog](/extensions/explore) and the [`xk6` topic on GitHub](https://github.com/topics/xk6)
+- **Prefer generic solutions** - If you can test with a generic protocol like MQTT, use [xk6-mqtt](https://github.com/pmalhaire/xk6-mqtt) over building a custom protocol extension
+- **Consider pure JavaScript** - A JavaScript library will be better supported, more straightforward, and reusable than an extension
+
+## JavaScript extensions
+
+JavaScript extensions extend the JavaScript APIs available to your test scripts. They can add support for new network protocols, improve performance, or add features.
+
+### Create a simple extension
+
+<Steps>
+  <Step title="Set up the project">
+    Create a directory and initialize a Go module:
+    
+    ```bash
+    mkdir xk6-compare
+    cd xk6-compare
+    go mod init xk6-compare
+    ```
+  </Step>
+  
+  <Step title="Write the Go code">
+    Create `compare.go` with a struct that exposes methods:
+    
+    ```go
+    package compare
+    
+    import (
+        "fmt"
+        "go.k6.io/k6/js/modules"
+    )
+    
+    // init is called by the Go runtime at application startup.
+    func init() {
+        modules.Register("k6/x/compare", new(Compare))
+    }
+    
+    // Compare is the type for our custom API.
+    type Compare struct{
+        ComparisonResult string // textual description of the most recent comparison
+    }
+    
+    // IsGreater returns true if a is greater than b.
+    func (c *Compare) IsGreater(a, b int) bool {
+        if a > b {
+            c.ComparisonResult = fmt.Sprintf("%d is greater than %d", a, b)
+            return true
+        } else {
+            c.ComparisonResult = fmt.Sprintf("%d is NOT greater than %d", a, b)
+            return false
+        }
+    }
+    ```
+  </Step>
+  
+  <Step title="Build the extension">
+    Compile k6 with your extension:
+    
+    ```bash
+    xk6 build --with xk6-compare=.
+    ```
+  </Step>
+  
+  <Step title="Use in a test script">
+    Create `test.js`:
+    
+    ```javascript
+    import compare from 'k6/x/compare';
+    
+    export default function () {
+      console.log(`${compare.isGreater(2, 1)}, ${compare.comparison_result}`);
+      console.log(`${compare.isGreater(1, 3)}, ${compare.comparison_result}`);
+    }
+    ```
+    
+    Run the test:
+    
+    ```bash
+    ./k6 run test.js
+    ```
+  </Step>
+</Steps>
+
+<Note>
+k6 extensions must have the `k6/x/` prefix, and the short name must be unique among all extensions built in the same k6 binary.
+</Note>
+
+### Advanced module API
+
+For extensions that need access to internal k6 objects (VU state, runtime), implement the advanced module API:
+
+```go
+package compare
+
+import (
+    "fmt"
+    "go.k6.io/k6/js/modules"
+)
+
+func init() {
+    modules.Register("k6/x/compare", New())
+}
+
+type (
+    // RootModule is the global module instance.
+    RootModule struct{}
+    
+    // ModuleInstance represents an instance for each VU.
+    ModuleInstance struct {
+        vu modules.VU
+        comparator *Compare
+    }
+)
+
+var (
+    _ modules.Instance = &ModuleInstance{}
+    _ modules.Module   = &RootModule{}
+)
+
+func New() *RootModule {
+    return &RootModule{}
+}
+
+func (*RootModule) NewModuleInstance(vu modules.VU) modules.Instance {
+    return &ModuleInstance{
+        vu: vu,
+        comparator: &Compare{vu: vu},
+    }
+}
+
+type Compare struct{
+    vu modules.VU
+    ComparisonResult string
+}
+
+func (c *Compare) IsGreater(a, b int) bool {
+    // Implementation with access to c.vu for VU state
+    // ...
+}
+
+func (mi *ModuleInstance) Exports() modules.Exports {
+    return modules.Exports{
+        Default: mi.comparator,
+    }
+}
+```
+
+## Output extensions
+
+Output extensions send metrics to a custom file format or service. They can add custom processing and dispatching methods.
+
+### Create an output extension
+
+<Steps>
+  <Step title="Set up the project">
+    ```bash
+    mkdir xk6-output-logger
+    cd xk6-output-logger
+    go mod init xk6-output-logger
+    ```
+  </Step>
+  
+  <Step title="Implement the Output interface">
+    Create `logger.go`:
+    
+    ```go
+    package log
+    
+    import (
+        "fmt"
+        "io"
+        "strings"
+        "time"
+        
+        "go.k6.io/k6/metrics"
+        "go.k6.io/k6/output"
+    )
+    
+    func init() {
+        output.RegisterExtension("logger", New)
+    }
+    
+    type Logger struct {
+        out io.Writer
+    }
+    
+    func New(params output.Params) (output.Output, error) {
+        return &Logger{params.StdOut}, nil
+    }
+    
+    func (*Logger) Description() string {
+        return "logger"
+    }
+    
+    func (*Logger) Start() error {
+        return nil
+    }
+    
+    func (l *Logger) AddMetricSamples(samples []metrics.SampleContainer) {
+        for _, sample := range samples {
+            all := sample.GetSamples()
+            fmt.Fprintf(l.out, "%s [%s]\n", 
+                all[0].GetTime().Format(time.RFC3339Nano), 
+                metricKeyValues(all))
+        }
+    }
+    
+    func metricKeyValues(samples []metrics.Sample) string {
+        names := make([]string, 0, len(samples))
+        for _, sample := range samples {
+            names = append(names, fmt.Sprintf("%s=%v", sample.Metric.Name, sample.Value))
+        }
+        return strings.Join(names, ", ")
+    }
+    
+    func (*Logger) Stop() error {
+        return nil
+    }
+    ```
+  </Step>
+  
+  <Step title="Build and test">
+    ```bash
+    xk6 build --with xk6-output-logger=.
+    ./k6 run test.js --out logger --quiet --no-summary --iterations 2
+    ```
+  </Step>
+</Steps>
+
+## Secret source extensions
+
+Secret source extensions provide secrets to your k6 script at runtime from external sources like HashiCorp Vault or AWS Secrets Manager.
+
+## Subcommand extensions
+
+Subcommand extensions add custom CLI commands under the `k6 x` namespace for setup, validation, and integration tools.
+
+## Best practices
+
+<CardGroup cols={2}>
+  <Card title="Performance" icon="gauge-high">
+    Code in the default function executes many times. Ensure operations are performant and thread-safe.
+  </Card>
+  
+  <Card title="Initialization" icon="rocket">
+    Do heavy initialization in the init context, not in the default function.
+  </Card>
+  
+  <Card title="Custom metrics" icon="chart-line">
+    Use `Registry.NewMetric()` to create custom metrics and emit them with `metrics.PushIfNotDone()`.
+  </Card>
+  
+  <Card title="Templates" icon="file-code">
+    Use the [xk6-example](https://github.com/grafana/xk6-example) or [xk6-output-example](https://github.com/grafana/xk6-output-example) templates.
+  </Card>
+</CardGroup>
+
+## Quick start with templates
+
+The fastest way to get started is using GitHub templates:
+
+1. Create a repository from [grafana/xk6-example](https://github.com/grafana/xk6-example) for JavaScript extensions
+2. Or use [grafana/xk6-output-example](https://github.com/grafana/xk6-output-example) for output extensions
+3. Open in GitHub Codespaces for instant development environment
+4. Run `xk6 run script.js` to test immediately
+
+## Registry requirements
+
+If you maintain a public xk6 repository and wish to have your extension listed in the [registry](/extensions/explore), review the requirements in the k6 documentation.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Bundle Extensions" icon="box" href="/extensions/bundle">
+    Build custom k6 binaries with xk6
+  </Card>
+  
+  <Card title="Explore Extensions" icon="compass" href="/extensions/explore">
+    See what others have built
+  </Card>
+  
+  <Card title="Community Forum" icon="users" href="https://community.grafana.com/c/grafana-k6/extensions/82">
+    Ask questions and share your extensions
+  </Card>
+  
+  <Card title="GitHub Template" icon="github" href="https://github.com/grafana/xk6-example">
+    Start with the official template
+  </Card>
+</CardGroup>

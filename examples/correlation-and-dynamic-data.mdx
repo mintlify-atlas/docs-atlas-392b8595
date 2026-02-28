@@ -1,0 +1,563 @@
+---
+title: 'Correlation & Dynamic Data'
+description: 'Extract and reuse dynamic values like tokens, session IDs, CSRF tokens, and ViewStates from API responses'
+icon: 'link'
+---
+
+Learn how to extract dynamic values from responses and use them in subsequent requests - essential for testing realistic user flows.
+
+## What is Correlation?
+
+Correlation means extracting values from one response and reusing them in later requests. This is critical for:
+
+- Session tokens and authentication
+- CSRF tokens and security nonces
+- Resource IDs from created objects
+- Dynamic form values (VIEWSTATE, hidden fields)
+- Transaction IDs and reference numbers
+
+<Note>
+Recorded scripts capture session-specific data that expires quickly. You must correlate these values to create working tests.
+</Note>
+
+## Extracting from JSON Responses
+
+Most modern APIs return JSON data. Extract values by parsing the response:
+
+```javascript
+import http from 'k6/http';
+import { check } from 'k6';
+
+export default function () {
+  // Make a request that returns JSON data
+  const reqHeaders = {
+    Authorization: 'Token abcdef0123456789',
+  };
+  const res = http.get('https://quickpizza.grafana.com/api/doughs', {
+    headers: reqHeaders,
+  });
+
+  // Extract data from JSON by parsing and navigating the object
+  const dough1 = res.json().doughs[0];
+  check(dough1, {
+    'dough 1 has correct name': (s) => s.name === 'Thin',
+    'dough 1 has correct ID': (s) => s.ID === 1,
+  });
+
+  // Use the extracted data in subsequent requests
+  const orderRes = http.post(
+    'https://quickpizza.grafana.com/api/orders',
+    JSON.stringify({ doughId: dough1.ID }),
+    { headers: reqHeaders }
+  );
+}
+```
+
+<Tip>
+Use `res.json()` to parse the entire response, or `res.json('path.to.field')` to extract a specific field directly.
+</Tip>
+
+## Extracting from HTML Forms
+
+Web applications often include hidden fields with dynamic values. Extract them before form submission:
+
+### Method 1: Using Response.submitForm()
+
+The high-level API handles form extraction automatically:
+
+```javascript
+import http from 'k6/http';
+import { check } from 'k6';
+
+export default function () {
+  // Get the page with the form
+  const res = http.get('https://example.com/form');
+  
+  // Submit the form, k6 extracts hidden fields automatically
+  const submitRes = res.submitForm({
+    fields: {
+      username: 'testuser',
+      password: 'testpass',
+    },
+  });
+  
+  check(submitRes, { 'login successful': (r) => r.status === 200 });
+}
+```
+
+### Method 2: Manual Extraction
+
+For more control, extract specific fields manually:
+
+```javascript
+import http from 'k6/http';
+import { sleep } from 'k6';
+
+export default function () {
+  // Request the page containing a form
+  const res = http.get('https://test.k6.io/my_messages.php', { responseType: 'text' });
+
+  // Query the HTML for an input field named "redir"
+  const elem = res.html().find('input[name=redir]');
+
+  // Get the value of the attribute "value"
+  const val = elem.attr('value');
+
+  // Use the extracted value in subsequent requests
+  console.log('The value of the hidden field redir is: ' + val);
+
+  // Now make a request with the extracted value
+  http.post('https://test.k6.io/submit', {
+    redir: val,
+    message: 'Hello from k6!',
+  });
+
+  sleep(1);
+}
+```
+
+<Warning>
+If you set `discardResponseBodies: true` in options, you must override it per request with `{responseType: "text"}` to access the response body.
+</Warning>
+
+## Extracting .NET ViewState and CSRF Tokens
+
+Common pattern for .NET applications:
+
+```javascript
+import http from 'k6/http';
+import { check } from 'k6';
+
+export default function () {
+  // Get the page with the form
+  const res = http.get('https://example.com/login', { responseType: 'text' });
+  
+  // Extract multiple hidden fields
+  const viewState = res.html().find('input[name=__VIEWSTATE]').attr('value');
+  const viewStateGenerator = res.html().find('input[name=__VIEWSTATEGENERATOR]').attr('value');
+  const eventValidation = res.html().find('input[name=__EVENTVALIDATION]').attr('value');
+  const csrfToken = res.html().find('input[name=csrf_token]').attr('value');
+  
+  // Submit form with all extracted values
+  const loginRes = http.post('https://example.com/login', {
+    __VIEWSTATE: viewState,
+    __VIEWSTATEGENERATOR: viewStateGenerator,
+    __EVENTVALIDATION: eventValidation,
+    csrf_token: csrfToken,
+    username: 'testuser',
+    password: 'testpass',
+  });
+  
+  check(loginRes, { 'login successful': (r) => r.status === 200 });
+}
+```
+
+## Generic String Extraction
+
+For responses that aren't JSON or HTML, extract values using string boundaries:
+
+```javascript
+import { findBetween } from 'https://jslib.k6.io/k6-utils/1.2.0/index.js';
+import { check } from 'k6';
+import http from 'k6/http';
+
+export default function () {
+  // This request returns XML
+  const res = http.get('https://quickpizza.grafana.com/api/xml?color=green');
+
+  // Use findBetween to extract the first <value> tag
+  const color = findBetween(res.body, '<value>', '</value>');
+
+  check(color, {
+    'color is correct': (t) => t === 'green',
+  });
+  
+  // Use extracted value in next request
+  http.post('https://quickpizza.grafana.com/api/verify', 
+    JSON.stringify({ color: color })
+  );
+}
+```
+
+<Tabs>
+  <Tab title="findBetween()">
+    Extract the first occurrence between boundaries:
+    
+    ```javascript
+    import { findBetween } from 'https://jslib.k6.io/k6-utils/1.2.0/index.js';
+    
+    const token = findBetween(res.body, 'token="', '"');
+    ```
+  </Tab>
+  
+  <Tab title="Regular Expression">
+    Use regex for complex patterns:
+    
+    ```javascript
+    const match = res.body.match(/token="([^"]+)"/);
+    const token = match ? match[1] : null;
+    ```
+  </Tab>
+  
+  <Tab title="String Methods">
+    Use built-in JavaScript string methods:
+    
+    ```javascript
+    const start = res.body.indexOf('token="') + 7;
+    const end = res.body.indexOf('"', start);
+    const token = res.body.substring(start, end);
+    ```
+  </Tab>
+</Tabs>
+
+## Complete Correlation Example
+
+Realistic user flow with multiple correlations:
+
+```javascript
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+import { randomString } from 'https://jslib.k6.io/k6-utils/1.2.0/index.js';
+
+export const options = {
+  vus: 10,
+  duration: '1m',
+};
+
+export default function () {
+  // 1. Get login page and extract CSRF token
+  const loginPage = http.get('https://example.com/login', { responseType: 'text' });
+  const csrfToken = loginPage.html().find('input[name=csrf_token]').attr('value');
+  
+  check(csrfToken, { 'extracted CSRF token': (t) => t !== undefined });
+  
+  // 2. Login and get session cookie + auth token
+  const loginRes = http.post('https://example.com/login', {
+    csrf_token: csrfToken,
+    username: 'testuser',
+    password: 'testpass',
+  });
+  
+  const authToken = loginRes.json('token');
+  check(authToken, { 'received auth token': (t) => t !== undefined });
+  
+  // 3. Create a resource and get its ID
+  const createRes = http.post(
+    'https://example.com/api/items',
+    JSON.stringify({
+      name: `Item ${randomString(8)}`,
+      description: 'Test item',
+    }),
+    {
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+  
+  const itemId = createRes.json('id');
+  check(createRes, {
+    'item created': (r) => r.status === 201,
+    'has item ID': () => itemId !== undefined,
+  });
+  
+  sleep(1);
+  
+  // 4. Update the resource using extracted ID
+  const updateRes = http.put(
+    `https://example.com/api/items/${itemId}`,
+    JSON.stringify({ name: 'Updated Name' }),
+    {
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+  
+  check(updateRes, { 'item updated': (r) => r.status === 200 });
+  
+  sleep(1);
+  
+  // 5. Delete the resource
+  const deleteRes = http.del(
+    `https://example.com/api/items/${itemId}`,
+    null,
+    {
+      headers: { 'Authorization': `Bearer ${authToken}` },
+    }
+  );
+  
+  check(deleteRes, { 'item deleted': (r) => r.status === 204 });
+}
+```
+
+## Advanced Patterns
+
+### Sharing Data Between VUs
+
+Extract data in setup, share with all VUs:
+
+```javascript
+export function setup() {
+  // Get data once for all VUs
+  const res = http.get('https://api.example.com/config');
+  return {
+    apiKey: res.json('apiKey'),
+    endpoints: res.json('endpoints'),
+  };
+}
+
+export default function (data) {
+  // All VUs use shared data
+  http.get(data.endpoints.users, {
+    headers: { 'X-API-Key': data.apiKey },
+  });
+}
+```
+
+### Correlation with Multiple Matches
+
+Extract multiple values from a response:
+
+```javascript
+import http from 'k6/http';
+
+export default function () {
+  const res = http.get('https://api.example.com/products');
+  
+  // Get all product IDs
+  const products = res.json('products');
+  const productIds = products.map(p => p.id);
+  
+  // Use random product ID
+  const randomId = productIds[Math.floor(Math.random() * productIds.length)];
+  
+  http.get(`https://api.example.com/products/${randomId}`);
+}
+```
+
+### Token Refresh Pattern
+
+Handle token expiration and renewal:
+
+```javascript
+import http from 'k6/http';
+
+let accessToken = null;
+let refreshToken = null;
+let tokenExpiry = 0;
+
+function getValidToken() {
+  // Check if token needs refresh
+  if (Date.now() > tokenExpiry) {
+    const res = http.post(
+      'https://api.example.com/auth/refresh',
+      JSON.stringify({ refresh_token: refreshToken }),
+      { headers: { 'Content-Type': 'application/json' } }
+    );
+    
+    accessToken = res.json('access_token');
+    refreshToken = res.json('refresh_token');
+    tokenExpiry = Date.now() + (res.json('expires_in') * 1000);
+  }
+  
+  return accessToken;
+}
+
+export function setup() {
+  // Initial login
+  const res = http.post(
+    'https://api.example.com/auth/login',
+    JSON.stringify({ username: 'user', password: 'pass' })
+  );
+  
+  accessToken = res.json('access_token');
+  refreshToken = res.json('refresh_token');
+  tokenExpiry = Date.now() + (res.json('expires_in') * 1000);
+}
+
+export default function () {
+  const token = getValidToken();
+  
+  http.get('https://api.example.com/data', {
+    headers: { 'Authorization': `Bearer ${token}` },
+  });
+}
+```
+
+## Common Extraction Scenarios
+
+<AccordionGroup>
+  <Accordion title="OAuth 2.0 Token Flow">
+    ```javascript
+    export function setup() {
+      // Get access token
+      const tokenRes = http.post(
+        'https://auth.example.com/oauth/token',
+        {
+          grant_type: 'client_credentials',
+          client_id: __ENV.CLIENT_ID,
+          client_secret: __ENV.CLIENT_SECRET,
+        }
+      );
+      
+      return {
+        accessToken: tokenRes.json('access_token'),
+        tokenType: tokenRes.json('token_type'),
+      };
+    }
+    
+    export default function (data) {
+      http.get('https://api.example.com/resource', {
+        headers: { 
+          'Authorization': `${data.tokenType} ${data.accessToken}` 
+        },
+      });
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="WordPress Nonce">
+    ```javascript
+    import http from 'k6/http';
+    
+    export default function () {
+      // Get WordPress page
+      const page = http.get('https://example.com/wp-admin/', {
+        responseType: 'text',
+      });
+      
+      // Extract nonce
+      const nonce = page.html().find('input[name=_wpnonce]').attr('value');
+      
+      // Submit form with nonce
+      http.post('https://example.com/wp-admin/post.php', {
+        _wpnonce: nonce,
+        action: 'edit',
+        post_title: 'Test Post',
+      });
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Pagination with Cursor">
+    ```javascript
+    import http from 'k6/http';
+    
+    export default function () {
+      let cursor = null;
+      let hasMore = true;
+      
+      while (hasMore) {
+        const url = cursor 
+          ? `https://api.example.com/items?cursor=${cursor}`
+          : 'https://api.example.com/items';
+        
+        const res = http.get(url);
+        const data = res.json();
+        
+        // Process items
+        console.log(`Fetched ${data.items.length} items`);
+        
+        // Extract next cursor
+        cursor = data.nextCursor;
+        hasMore = data.hasMore;
+      }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+### Always Validate Extracted Data
+
+```javascript
+const token = res.json('token');
+
+if (!token) {
+  console.error('Failed to extract token:', res.body);
+  return; // Exit early
+}
+
+// Use token safely
+http.get(url, { headers: { 'Authorization': `Bearer ${token}` } });
+```
+
+### Use Descriptive Variable Names
+
+```javascript
+// Good
+const csrfToken = res.html().find('input[name=csrf_token]').attr('value');
+const userId = createUserRes.json('id');
+
+// Bad
+const val1 = res.html().find('input[name=csrf_token]').attr('value');
+const id = createUserRes.json('id');
+```
+
+### Handle Missing Values Gracefully
+
+```javascript
+import { check } from 'k6';
+
+const res = http.get('https://api.example.com/data');
+const data = res.json();
+
+if (!check(data, { 'has token': (d) => d.token !== undefined })) {
+  console.error('Response missing token:', res.body);
+  return;
+}
+
+const token = data.token;
+```
+
+## Debugging Extraction
+
+Troubleshoot extraction issues:
+
+```javascript
+import http from 'k6/http';
+
+export const options = {
+  iterations: 1,
+};
+
+export default function () {
+  const res = http.get('https://example.com/page');
+  
+  // Log full response
+  console.log('Status:', res.status);
+  console.log('Body:', res.body);
+  
+  // Try extraction
+  const token = res.html().find('input[name=token]').attr('value');
+  console.log('Extracted token:', token);
+  
+  // Log all matching elements
+  const inputs = res.html().find('input');
+  console.log('Found inputs:', inputs.size());
+}
+```
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="API CRUD Operations" icon="database" href="/examples/api-crud-operations">
+    See correlation in complete API workflows
+  </Card>
+  
+  <Card title="HTTP Authentication" icon="shield-check" href="/examples/http-authentication">
+    Extract and use authentication tokens
+  </Card>
+  
+  <Card title="Test Lifecycle" icon="rotate" href="/guides/test-lifecycle">
+    Use setup() to share extracted data
+  </Card>
+  
+  <Card title="API Reference: Response" icon="book" href="/api-reference/k6-http-response">
+    Response methods for data extraction
+  </Card>
+</CardGroup>

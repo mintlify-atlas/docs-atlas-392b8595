@@ -1,0 +1,147 @@
+---
+title: Extensions Overview
+description: Extend k6 with custom functionality through JavaScript extensions, output formats, secret sources, and subcommands
+icon: puzzle-piece
+---
+
+With k6 extensions, you can extend the core k6 functionality with new features to support your specific reliability-testing needs.
+
+## Extension types
+
+k6 supports four types of extensions:
+
+<CardGroup cols={2}>
+  <Card title="JavaScript Extensions" icon="code" href="/extensions/create#javascript-extensions">
+    Extend the JavaScript APIs available to your test scripts. Add support for new network protocols, improve performance, or add features.
+  </Card>
+  
+  <Card title="Output Extensions" icon="database" href="/extensions/create#output-extensions">
+    Send metrics to a custom file format or service. Add custom processing and dispatching methods.
+  </Card>
+  
+  <Card title="Secret Source Extensions" icon="key" href="/extensions/create#secret-source-extensions">
+    Provide secrets to your tests from external sources.
+  </Card>
+  
+  <Card title="Subcommand Extensions" icon="terminal" href="/extensions/create#subcommand-extensions">
+    Add custom CLI commands under the `k6 x` namespace for setup, validation, and integration tools.
+  </Card>
+</CardGroup>
+
+## Official vs community extensions
+
+### Official extensions
+
+These extensions are owned and maintained by Grafana Labs, with support for a wide range of k6 versions. Official extensions include:
+
+- **k6/x/mqtt** - MQTT protocol support
+- **k6/x/redis** - Redis database interaction
+- **k6/x/sql** - SQL database testing
+- **k6 browser** - Browser automation and end-to-end testing
+- **xk6-disruptor** - Chaos testing and fault injection
+
+Explore the full list in [Explore Extensions](/extensions/explore).
+
+### Community extensions
+
+Community extensions are developed by the k6 ecosystem, supporting specific versions. While not maintained by Grafana Labs, many provide valuable functionality for specialized testing needs.
+
+<Note>
+Many extensions maintained by members of the k6 ecosystem are available on [GitHub](https://github.com/topics/xk6). These extensions aren't maintained nor audited by Grafana Labs.
+</Note>
+
+## Using extensions
+
+There are two ways to use extensions in your k6 tests:
+
+### Automatic extension resolution
+
+Official and community extensions can be used without additional configuration. Simply import them in your test script:
+
+```javascript
+import faker from 'k6/x/faker';
+
+export default function () {
+  console.log(faker.person.firstName());
+}
+```
+
+Then run your script normally:
+
+```bash
+k6 run script.js
+```
+
+<Note>
+To use community extensions, set `K6_ENABLE_COMMUNITY_EXTENSIONS=true`:
+
+```bash
+K6_ENABLE_COMMUNITY_EXTENSIONS=true k6 run test.js
+```
+</Note>
+
+### Custom k6 binary
+
+For custom extensions or output extensions, build a custom k6 binary using [xk6](https://github.com/grafana/xk6):
+
+<CodeGroup>
+```bash Go and xk6
+xk6 build \
+  --with github.com/grafana/xk6-sql@v0.0.1 \
+  --with github.com/grafana/xk6-output-influxdb
+```
+
+```bash Docker on Linux
+docker run --rm -u "$(id -u):$(id -g)" -v "${PWD}:/xk6" grafana/xk6 build \
+  --with github.com/grafana/xk6-sql@v0.0.1
+```
+</CodeGroup>
+
+Learn more in [Building Custom k6 Binaries](/extensions/bundle).
+
+## Getting started
+
+<Steps>
+  <Step title="Explore available extensions">
+    Browse the [Extensions catalog](/extensions/explore) to find extensions for your use case.
+  </Step>
+  
+  <Step title="Try an extension">
+    Start with an official extension like [xk6-disruptor](/extensions/xk6-disruptor) for chaos testing or [k6 browser](/extensions/browser) for browser automation.
+  </Step>
+  
+  <Step title="Build your own">
+    Create custom extensions when you need specialized functionality. See [Creating Extensions](/extensions/create).
+  </Step>
+</Steps>
+
+## Why use extensions?
+
+Extensions enable you to:
+
+- **Test new protocols** - Add support for MQTT, Redis, gRPC, and more
+- **Integrate with tools** - Send metrics to your preferred monitoring systems
+- **Enhance performance** - Use Go's speed for computationally intensive operations
+- **Customize workflows** - Add CLI commands for your specific testing process
+- **Manage secrets** - Securely inject credentials from external vaults
+- **Extend capabilities** - Add chaos testing, browser automation, and more
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Explore Extensions" icon="compass" href="/extensions/explore">
+    Find extensions for your testing needs
+  </Card>
+  
+  <Card title="Create Extensions" icon="hammer" href="/extensions/create">
+    Build custom extensions in Go
+  </Card>
+  
+  <Card title="Bundle Extensions" icon="box" href="/extensions/bundle">
+    Build custom k6 binaries with xk6
+  </Card>
+  
+  <Card title="xk6-disruptor" icon="bolt" href="/extensions/xk6-disruptor">
+    Inject faults for chaos testing
+  </Card>
+</CardGroup>

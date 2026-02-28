@@ -1,0 +1,455 @@
+---
+title: Grafana Dashboards
+description: Visualize k6 test results in Grafana with pre-built dashboards or create custom visualizations to correlate with system metrics.
+---
+
+# Grafana Dashboards
+
+Grafana provides powerful visualization capabilities for k6 test results. By combining k6 metrics with application and system metrics in a single dashboard, you can quickly identify performance bottlenecks and analyze trends over time.
+
+## Benefits
+
+Visualizing k6 results in Grafana offers several advantages:
+
+<CardGroup cols={2}>
+  <Card title="Real-Time Monitoring" icon="eye">
+    Watch test results as they stream in, identifying issues immediately
+  </Card>
+  <Card title="Historical Analysis" icon="clock">
+    Compare test runs over time to track performance trends
+  </Card>
+  <Card title="Correlation" icon="link">
+    View k6 metrics alongside system metrics (CPU, memory) to find root causes
+  </Card>
+  <Card title="Customization" icon="palette">
+    Create dashboards tailored to your specific needs and metrics
+  </Card>
+</CardGroup>
+
+<img src="/images/correlated-grafana-dashboard.png" alt="Grafana dashboard showing k6 results correlated with system metrics" />
+
+## Prerequisites
+
+To visualize k6 results in Grafana, you need:
+
+1. **Grafana** - Either self-hosted or Grafana Cloud
+2. **Storage backend** - A database to store k6 metrics (InfluxDB, Prometheus, etc.)
+3. **k6 output configuration** - Stream metrics from k6 to your backend
+
+## Quick Start
+
+Here's a complete example using Docker Compose with InfluxDB and Grafana:
+
+<Steps>
+  <Step title="Create docker-compose.yml">
+    ```yaml docker-compose.yml
+    version: '3.8'
+    services:
+      influxdb:
+        image: influxdb:2.7
+        ports:
+          - "8086:8086"
+        environment:
+          - DOCKER_INFLUXDB_INIT_MODE=setup
+          - DOCKER_INFLUXDB_INIT_USERNAME=admin
+          - DOCKER_INFLUXDB_INIT_PASSWORD=adminpass
+          - DOCKER_INFLUXDB_INIT_ORG=myorg
+          - DOCKER_INFLUXDB_INIT_BUCKET=k6
+        volumes:
+          - influxdb-data:/var/lib/influxdb2
+
+      grafana:
+        image: grafana/grafana:latest
+        ports:
+          - "3000:3000"
+        environment:
+          - GF_AUTH_ANONYMOUS_ENABLED=true
+          - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+        volumes:
+          - grafana-data:/var/lib/grafana
+        depends_on:
+          - influxdb
+
+    volumes:
+      influxdb-data:
+      grafana-data:
+    ```
+  </Step>
+  <Step title="Start services">
+    ```sh
+    docker-compose up -d
+    ```
+  </Step>
+  <Step title="Build k6 with InfluxDB extension">
+    ```sh
+    xk6 build --with github.com/grafana/xk6-output-influxdb
+    ```
+  </Step>
+  <Step title="Run k6 test">
+    ```sh
+    K6_INFLUXDB_ORGANIZATION=myorg \
+    K6_INFLUXDB_BUCKET=k6 \
+    K6_INFLUXDB_TOKEN=your-token \
+    ./k6 run --out xk6-influxdb script.js
+    ```
+  </Step>
+  <Step title="Access Grafana">
+    Open http://localhost:3000 and import a pre-built dashboard
+  </Step>
+</Steps>
+
+## Pre-Built Dashboards
+
+Several k6 outputs include ready-to-use Grafana dashboards:
+
+<Tabs>
+  <Tab title="InfluxDB">
+    **Output:** [grafana/xk6-output-influxdb](https://github.com/grafana/xk6-output-influxdb)
+
+    **Dashboards:**
+    - k6 Test Result Dashboard
+    - k6 Test Comparison Dashboard
+
+    **Import:**
+    1. Download dashboards from [GitHub](https://github.com/grafana/xk6-output-influxdb/tree/main/grafana/dashboards)
+    2. In Grafana: Dashboards → Import → Upload JSON file
+    3. Select your InfluxDB data source
+
+    **Features:**
+    - Real-time metrics visualization
+    - Request rate and error rate
+    - Response time percentiles
+    - Virtual user activity
+    - Data transfer rates
+  </Tab>
+  <Tab title="Prometheus">
+    **Output:** Prometheus Remote Write
+
+    **Dashboard:** [k6 Prometheus](https://grafana.com/grafana/dashboards/19665-k6-prometheus/)
+
+    **Import:**
+    1. In Grafana: Dashboards → Import
+    2. Enter dashboard ID: `19665`
+    3. Select your Prometheus data source
+
+    **For Native Histograms:**
+    - Dashboard ID: `18030`
+    - Enables advanced percentile calculations
+
+    **Run test:**
+    ```sh
+    K6_PROMETHEUS_RW_SERVER_URL=http://localhost:9090/api/v1/write \
+    k6 run --out experimental-prometheus-rw script.js
+    ```
+  </Tab>
+  <Tab title="Grafana Cloud Prometheus">
+    **Output:** Grafana Cloud Prometheus
+
+    **Dashboard:** [k6 Prometheus](https://grafana.com/grafana/dashboards/19665-k6-prometheus/)
+
+    **Import:** Dashboard ID `19665`
+
+    **Run test:**
+    ```sh
+    K6_PROMETHEUS_RW_SERVER_URL=https://prometheus-prod-01-eu-west-0.grafana.net/api/prom/push \
+    K6_PROMETHEUS_RW_USERNAME=<username> \
+    K6_PROMETHEUS_RW_PASSWORD=<password> \
+    k6 run --out experimental-prometheus-rw script.js
+    ```
+  </Tab>
+  <Tab title="TimescaleDB">
+    **Output:** [grafana/xk6-output-timescaledb](https://github.com/grafana/xk6-output-timescaledb)
+
+    **Dashboards:**
+    - k6 TimescaleDB Dashboard
+
+    **Import:**
+    Download from [GitHub](https://github.com/grafana/xk6-output-timescaledb/tree/main/grafana/dashboards)
+  </Tab>
+  <Tab title="AWS Timestream">
+    **Output:** [leonyork/xk6-output-timestream](https://github.com/leonyork/xk6-output-timestream)
+
+    **Dashboards:**
+    Available in the [repository](https://github.com/leonyork/xk6-output-timestream/tree/main/grafana/dashboards/)
+  </Tab>
+</Tabs>
+
+## Dashboard Examples
+
+### Standard Metrics Dashboard
+
+A typical k6 dashboard includes these panels:
+
+**Performance Overview:**
+- Response time (p50, p95, p99)
+- Request rate (requests/second)
+- Error rate (%)
+- Virtual users (active)
+
+**HTTP Metrics:**
+- Request duration breakdown (blocked, connecting, TLS, sending, waiting, receiving)
+- Failed requests over time
+- Requests by status code
+
+**System Impact:**
+- Data sent/received
+- Iterations per second
+- Iteration duration
+
+**Thresholds & Checks:**
+- Threshold violations
+- Check success rate
+
+### Correlation Dashboard
+
+Combine k6 metrics with application metrics:
+
+```text
+┌─────────────────────────────────────────────────┐
+│ k6 Response Time (p95)          │ CPU Usage (%) │
+│ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ │ ━━━━━━━━━━━━ │
+└─────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────┐
+│ k6 Request Rate        │ Database Connections   │
+│ ━━━━━━━━━━━━━━━━━━━━ │ ━━━━━━━━━━━━━━━━━━━━ │
+└─────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────┐
+│ k6 Error Rate          │ Application Logs       │
+│ ━━━━━━━━━━━━━━━━━━━━ │ [ERROR] Connection...│
+└─────────────────────────────────────────────────┘
+```
+
+This allows you to:
+- Identify when high load causes CPU spikes
+- Correlate response time degradation with database saturation
+- Match error rates with application errors
+
+## Creating Custom Dashboards
+
+Build dashboards tailored to your specific needs:
+
+<Tabs>
+  <Tab title="InfluxDB Query">
+    **Response time percentiles:**
+    ```flux
+    from(bucket: "k6")
+      |> range(start: -1h)
+      |> filter(fn: (r) => r._measurement == "http_req_duration")
+      |> aggregateWindow(every: 10s, fn: mean)
+    ```
+
+    **Request rate:**
+    ```flux
+    from(bucket: "k6")
+      |> range(start: -1h)
+      |> filter(fn: (r) => r._measurement == "http_reqs")
+      |> derivative(unit: 1s, nonNegative: true)
+    ```
+
+    **Error rate:**
+    ```flux
+    from(bucket: "k6")
+      |> range(start: -1h)
+      |> filter(fn: (r) => r._measurement == "http_req_failed")
+      |> map(fn: (r) => ({ r with _value: r._value * 100.0 }))
+    ```
+  </Tab>
+  <Tab title="Prometheus Query">
+    **Response time percentiles:**
+    ```promql
+    histogram_quantile(0.95, 
+      rate(k6_http_req_duration_seconds_bucket[5m])
+    )
+    ```
+
+    **Request rate:**
+    ```promql
+    rate(k6_http_reqs_total[1m])
+    ```
+
+    **Error rate:**
+    ```promql
+    rate(k6_http_req_failed_total[1m]) / 
+    rate(k6_http_reqs_total[1m]) * 100
+    ```
+
+    **Virtual users:**
+    ```promql
+    k6_vus
+    ```
+  </Tab>
+  <Tab title="Panel Configuration">
+    **Time series panel (response time):**
+    - Visualization: Time series
+    - Legend: p50, p95, p99
+    - Unit: milliseconds (ms)
+    - Y-axis: Linear scale
+
+    **Stat panel (error rate):**
+    - Visualization: Stat
+    - Unit: percent (0-100)
+    - Thresholds: Green < 1%, Orange < 5%, Red >= 5%
+
+    **Gauge panel (current VUs):**
+    - Visualization: Gauge
+    - Min: 0
+    - Max: Max VUs configured in test
+  </Tab>
+</Tabs>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use appropriate time ranges">
+    - For live tests: Last 5-15 minutes
+    - For analysis: Full test duration
+    - For trends: Days or weeks
+    
+    Set refresh interval to 5-10 seconds for real-time monitoring.
+  </Accordion>
+  <Accordion title="Organize with variables">
+    Create dashboard variables for:
+    - Test run ID or tag
+    - Scenario name
+    - Environment (dev, staging, prod)
+    
+    This makes dashboards reusable across different tests.
+  </Accordion>
+  <Accordion title="Add annotations">
+    Mark important events on your graphs:
+    - Deployment times
+    - Configuration changes
+    - Threshold violations
+    
+    Use Grafana's annotation features or log them as metrics.
+  </Accordion>
+  <Accordion title="Set meaningful alerts">
+    Configure alerts for:
+    - Error rate exceeds threshold
+    - Response time degradation
+    - Test failures
+    
+    Send notifications to Slack, PagerDuty, or email.
+  </Accordion>
+</AccordionGroup>
+
+## Complete Example
+
+Here's a full workflow with InfluxDB and Grafana:
+
+<CodeGroup>
+```javascript test.js
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+
+export const options = {
+  stages: [
+    { duration: '1m', target: 10 },
+    { duration: '3m', target: 10 },
+    { duration: '1m', target: 0 },
+  ],
+  thresholds: {
+    http_req_duration: ['p(95)<500'],
+    http_req_failed: ['rate<0.01'],
+  },
+};
+
+export default function () {
+  const res = http.get('https://test.k6.io');
+  check(res, {
+    'status is 200': (r) => r.status === 200,
+    'response time < 500ms': (r) => r.timings.duration < 500,
+  });
+  sleep(1);
+}
+```
+
+```sh run.sh
+#!/bin/bash
+
+# Build k6 with InfluxDB extension
+xk6 build --with github.com/grafana/xk6-output-influxdb
+
+# Start InfluxDB and Grafana
+docker-compose up -d
+
+# Wait for services to be ready
+sleep 10
+
+# Run test
+K6_INFLUXDB_ORGANIZATION=myorg \
+K6_INFLUXDB_BUCKET=k6 \
+K6_INFLUXDB_TOKEN=my-token \
+K6_INFLUXDB_ADDR=http://localhost:8086 \
+./k6 run --out xk6-influxdb test.js
+
+echo "View results at http://localhost:3000"
+```
+
+```json dashboard.json
+{
+  "dashboard": {
+    "title": "k6 Load Test Results",
+    "panels": [
+      {
+        "title": "Response Time",
+        "type": "graph",
+        "targets": [
+          {
+            "query": "from(bucket: \"k6\") |> range(start: -1h) |> filter(fn: (r) => r._measurement == \"http_req_duration\")"
+          }
+        ]
+      },
+      {
+        "title": "Request Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "query": "from(bucket: \"k6\") |> range(start: -1h) |> filter(fn: (r) => r._measurement == \"http_reqs\")"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+</CodeGroup>
+
+## Grafana Cloud k6
+
+For a fully managed solution, [Grafana Cloud k6](https://grafana.com/products/cloud/k6/) provides:
+
+- Automatic metric storage and retention
+- Pre-built dashboards optimized for k6
+- Test management and scheduling
+- Team collaboration features
+- Cloud execution for distributed tests
+- No infrastructure to manage
+
+<Info>
+Grafana Cloud k6 includes specialized views beyond standard Grafana dashboards, designed specifically for load testing workflows.
+</Info>
+
+## Community Dashboards
+
+Explore more dashboards created by the community:
+
+- [Grafana Dashboard Library - k6](https://grafana.com/grafana/dashboards/?search=k6)
+- [k6 Community Forum](https://community.grafana.com/c/grafana-k6/)
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Real-Time Streaming" icon="stream" href="/results/real-time">
+    Learn how to stream metrics to your backend
+  </Card>
+  <Card title="Web Dashboard" icon="chart-line" href="/results/web-dashboard">
+    Use the built-in k6 web dashboard
+  </Card>
+  <Card title="Grafana Docs" icon="book" href="https://grafana.com/docs/grafana/latest/">
+    Explore Grafana's documentation
+  </Card>
+  <Card title="InfluxDB Extension" icon="database" href="https://github.com/grafana/xk6-output-influxdb">
+    View the InfluxDB output extension
+  </Card>
+</CardGroup>

@@ -1,0 +1,406 @@
+---
+title: 'Metrics'
+description: 'Understand built-in and custom metrics in k6, including the four metric types and how to use them for performance analysis.'
+---
+
+Metrics measure how your system performs under load. k6 automatically collects built-in metrics and lets you create custom metrics for application-specific measurements.
+
+## What are metrics?
+
+Metrics are measurements that k6 collects during test execution. They provide quantitative data about:
+
+- Request rates and response times
+- Error rates and status codes
+- Data transfer and connection times
+- Custom application-specific measurements
+
+k6 uses these metrics to generate test results, evaluate thresholds, and help you identify performance issues.
+
+## The four metric types
+
+k6 organizes metrics into four types, each suited for different measurements:
+
+<Tabs>
+  <Tab title="Counter">
+    **Counters sum values** over time.
+    
+    Use for: Total number of requests, errors, or events
+    
+    ```javascript
+    import { Counter } from 'k6/metrics';
+    
+    const errors = new Counter('errors');
+    
+    export default function () {
+      if (someCondition) {
+        errors.add(1);
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Gauge">
+    **Gauges track the latest value** and min/max.
+    
+    Use for: Current connection count, memory usage, response size
+    
+    ```javascript
+    import { Gauge } from 'k6/metrics';
+    
+    const contentSize = new Gauge('content_size');
+    
+    export default function () {
+      const res = http.get('https://test.k6.io');
+      contentSize.add(res.body.length);
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Rate">
+    **Rates track the percentage** of non-zero values.
+    
+    Use for: Error rates, success rates, check pass rates
+    
+    ```javascript
+    import { Rate } from 'k6/metrics';
+    
+    const errorRate = new Rate('errors');
+    
+    export default function () {
+      const res = http.get('https://test.k6.io');
+      errorRate.add(res.status !== 200);
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Trend">
+    **Trends calculate statistics** (min, max, avg, percentiles).
+    
+    Use for: Response times, waiting times, custom durations
+    
+    ```javascript
+    import { Trend } from 'k6/metrics';
+    
+    const waitingTime = new Trend('waiting_time');
+    
+    export default function () {
+      const res = http.get('https://test.k6.io');
+      waitingTime.add(res.timings.waiting);
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Built-in metrics
+
+k6 automatically collects metrics for HTTP requests and test execution. You don't need to do anything to collect these.
+
+### The RED metrics
+
+The most important metrics follow the RED method (Requests, Errors, Duration):
+
+<CardGroup cols={3}>
+  <Card title="http_reqs" icon="chart-line">
+    **Requests**
+    
+    Total number of HTTP requests
+  </Card>
+  
+  <Card title="http_req_failed" icon="triangle-exclamation">
+    **Errors**
+    
+    Rate of failed requests
+  </Card>
+  
+  <Card title="http_req_duration" icon="clock">
+    **Duration**
+    
+    Request response time
+  </Card>
+</CardGroup>
+
+These three metrics provide a comprehensive view of your system's performance and should be your starting point for analysis.
+
+### Other HTTP metrics
+
+k6 also collects detailed HTTP timing metrics:
+
+| Metric | Description |
+|--------|-------------|
+| `http_req_blocked` | Time waiting for available TCP connection |
+| `http_req_connecting` | Time establishing TCP connection |
+| `http_req_tls_handshaking` | Time for TLS handshake |
+| `http_req_sending` | Time sending data |
+| `http_req_waiting` | Time waiting for response (TTFB) |
+| `http_req_receiving` | Time receiving response |
+| `data_sent` | Amount of data sent |
+| `data_received` | Amount of data received |
+
+### Execution metrics
+
+| Metric | Description |
+|--------|-------------|
+| `iterations` | Total number of VU iterations |
+| `iteration_duration` | Time to complete one iteration |
+| `vus` | Current number of active VUs |
+| `vus_max` | Maximum VUs allocated |
+
+## Example output
+
+When you run a test, k6 displays metrics in the end-of-test summary:
+
+```bash
+$ k6 run script.js
+
+  █ TOTAL RESULTS
+
+    HTTP
+    http_req_duration..........: avg=117.55ms min=117.55ms med=117.55ms max=117.55ms p(90)=117.55ms p(95)=117.55ms
+      { expected_response:true }: avg=117.55ms min=117.55ms med=117.55ms max=117.55ms p(90)=117.55ms p(95)=117.55ms
+    http_req_failed............: 0.00%  0 out of 1
+    http_reqs..................: 1      2.768749/s
+
+    EXECUTION
+    iteration_duration.........: avg=361.09ms min=361.09ms med=361.09ms max=361.09ms p(90)=361.09ms p(95)=361.09ms
+    iterations.................: 1      2.768749/s
+
+    NETWORK
+    data_received..............: 6.8 kB 19 kB/s
+    data_sent..................: 541 B  1.5 kB/s
+```
+
+## Creating custom metrics
+
+Create custom metrics to measure application-specific performance.
+
+<Warning>
+  **Custom metrics must be created in init context** (outside lifecycle functions). This ensures k6 can validate thresholds and manage memory efficiently.
+</Warning>
+
+### Basic pattern
+
+<Steps>
+  <Step title="Import the metric type">
+    ```javascript
+    import { Trend } from 'k6/metrics';
+    ```
+  </Step>
+  
+  <Step title="Create the metric in init context">
+    ```javascript
+    const myTrend = new Trend('waiting_time');
+    ```
+  </Step>
+  
+  <Step title="Add measurements in VU code">
+    ```javascript
+    export default function () {
+      const res = http.get('https://test.k6.io');
+      myTrend.add(res.timings.waiting);
+    }
+    ```
+  </Step>
+</Steps>
+
+### Custom metric examples
+
+<CodeGroup>
+```javascript Trend metric
+import http from 'k6/http';
+import { Trend } from 'k6/metrics';
+
+const waitingTime = new Trend('waiting_time');
+
+export default function () {
+  const res = http.get('https://quickpizza.grafana.com/');
+  waitingTime.add(res.timings.waiting);
+}
+```
+
+```javascript Counter metric
+import http from 'k6/http';
+import { Counter } from 'k6/metrics';
+
+const errors = new Counter('custom_errors');
+
+export default function () {
+  const res = http.get('https://test.k6.io');
+  if (res.status >= 400) {
+    errors.add(1);
+  }
+}
+```
+
+```javascript Rate metric
+import http from 'k6/http';
+import { Rate } from 'k6/metrics';
+
+const successRate = new Rate('success_rate');
+
+export default function () {
+  const res = http.get('https://test.k6.io');
+  successRate.add(res.status === 200);
+}
+```
+
+```javascript Gauge metric
+import http from 'k6/http';
+import { Gauge } from 'k6/metrics';
+
+const responseSize = new Gauge('response_size');
+
+export default function () {
+  const res = http.get('https://test.k6.io');
+  responseSize.add(res.body.length);
+}
+```
+</CodeGroup>
+
+## Custom metric output
+
+Custom metrics appear in the end-of-test summary with their aggregated values:
+
+```bash
+$ k6 run script.js
+
+  ...
+  iteration_duration.............: avg=1.15s    min=1.15s    med=1.15s    max=1.15s
+  iterations.....................: 1     0.864973/s
+  waiting_time...................: avg=265.25ms min=265.25ms med=265.25ms max=265.25ms
+```
+
+<Note>
+  Custom metrics are collected at the end of each VU iteration. For long-running tests, metrics might not appear until the first iteration completes.
+</Note>
+
+## Tagging custom metrics
+
+Add tags to custom metric values for filtering:
+
+```javascript
+import http from 'k6/http';
+import { Trend } from 'k6/metrics';
+
+const apiDuration = new Trend('api_duration');
+
+export default function () {
+  const res = http.get('https://quickpizza.grafana.com/api/pizzas');
+  
+  // Add metric value with tags
+  apiDuration.add(res.timings.duration, {
+    endpoint: '/api/pizzas',
+    status: res.status,
+  });
+}
+```
+
+## Thresholds on custom metrics
+
+Set pass/fail criteria for custom metrics:
+
+```javascript
+import http from 'k6/http';
+import { Trend } from 'k6/metrics';
+
+const waitingTime = new Trend('waiting_time');
+
+export const options = {
+  thresholds: {
+    waiting_time: ['p(95)<300', 'avg<200'],
+  },
+};
+
+export default function () {
+  const res = http.get('https://quickpizza.grafana.com/');
+  waitingTime.add(res.timings.waiting);
+}
+```
+
+## Complete example
+
+Here's a comprehensive example using all four metric types:
+
+```javascript
+import http from 'k6/http';
+import { sleep } from 'k6';
+import { Counter, Gauge, Rate, Trend } from 'k6/metrics';
+
+// Custom metrics
+const apiCalls = new Counter('api_calls');
+const responseSize = new Gauge('response_size');
+const successRate = new Rate('success_rate');
+const apiDuration = new Trend('api_duration');
+
+export const options = {
+  vus: 10,
+  duration: '30s',
+  thresholds: {
+    api_calls: ['count>100'],
+    response_size: ['value<10000'],
+    success_rate: ['rate>0.95'],
+    api_duration: ['p(95)<500'],
+  },
+};
+
+export default function () {
+  const res = http.get('https://quickpizza.grafana.com/api/pizzas');
+  
+  // Record measurements
+  apiCalls.add(1);
+  responseSize.add(res.body.length);
+  successRate.add(res.status === 200);
+  apiDuration.add(res.timings.duration);
+  
+  sleep(1);
+}
+```
+
+## Metric name restrictions
+
+Metric names must:
+
+- Contain only ASCII letters, numbers, and underscores
+- Start with a letter or underscore
+- Be 128 characters or less
+
+```javascript
+// Valid
+const myMetric = new Trend('api_response_time');
+const anotherMetric = new Counter('_total_requests');
+
+// Invalid
+const invalid1 = new Trend('123-metric');  // Starts with number
+const invalid2 = new Trend('my-metric');   // Contains hyphen
+```
+
+## Best practices
+
+<CardGroup cols={2}>
+  <Card title="Start with RED metrics" icon="traffic-light">
+    Monitor http_reqs, http_req_failed, and http_req_duration before diving into custom metrics.
+  </Card>
+  
+  <Card title="Choose the right type" icon="shapes">
+    Use Trend for durations, Rate for percentages, Counter for totals, Gauge for current values.
+  </Card>
+  
+  <Card title="Tag for analysis" icon="tags">
+    Add tags to metrics to enable filtering by endpoint, status, or other dimensions.
+  </Card>
+  
+  <Card title="Set thresholds" icon="flag">
+    Define thresholds on metrics to automate pass/fail decisions.
+  </Card>
+</CardGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Metrics Reference" icon="book" href="/reference/metrics">
+    Complete list of all built-in metrics
+  </Card>
+  
+  <Card title="Thresholds" icon="flag" href="/using-k6/thresholds">
+    Set pass/fail criteria using metrics
+  </Card>
+</CardGroup>

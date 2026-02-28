@@ -1,0 +1,328 @@
+---
+title: Real-Time Result Streaming
+description: Stream k6 metrics in real time to files or external services for live monitoring and analysis.
+---
+
+# Real-Time Result Streaming
+
+Besides the end-of-test summary, k6 can stream metrics as granular data points in real time. This enables live monitoring, long-term storage, and integration with external observability platforms.
+
+## Overview
+
+Real-time streaming allows you to:
+
+- Monitor test progress as it runs
+- Store metrics for historical analysis
+- Integrate with existing monitoring systems
+- Build custom dashboards and alerts
+- Process metrics with your own tools
+
+You can stream metrics to either files or external services using the `--out` flag.
+
+## Output to Files
+
+k6 supports streaming metrics to local files in two formats:
+
+<CardGroup cols={2}>
+  <Card title="CSV" icon="file-csv">
+    Simple, human-readable format
+    
+    ```sh
+    k6 run --out csv=results.csv script.js
+    ```
+  </Card>
+  <Card title="JSON" icon="file-code">
+    Structured format with full metadata
+    
+    ```sh
+    k6 run --out json=results.json script.js
+    ```
+  </Card>
+</CardGroup>
+
+### CSV Output
+
+CSV output provides a simple, tabular format with one metric value per line:
+
+```sh
+k6 run --out csv=test_results.csv script.js
+```
+
+You can also compress the output automatically:
+
+```sh
+k6 run --out csv=test_results.gz script.js
+```
+
+**CSV Format:**
+
+```csv
+metric_name,timestamp,metric_value,check,error,error_code,group,method,name,proto,scenario,status,subproto,tls_version,url,extra_tags
+http_reqs,1595325560,1.000000,,,,,GET,http://test.k6.io,HTTP/1.1,default,200,,,http://test.k6.io,
+http_req_duration,1595325560,221.899000,,,,,GET,http://test.k6.io,HTTP/1.1,default,200,,,http://test.k6.io,
+http_req_blocked,1595325560,225.275000,,,,,GET,http://test.k6.io,HTTP/1.1,default,200,,,http://test.k6.io,
+http_req_connecting,1595325560,217.680000,,,,,GET,http://test.k6.io,HTTP/1.1,default,200,,,http://test.k6.io,
+vus,1595325560,1.000000,,,,,,,,,,,,,
+vus_max,1595325560,20.000000,,,,,,,,,,,,,
+checks,1595325561,1.000000,status is 200,,,,,,,default,,,,,
+data_sent,1595325561,76.000000,,,,,,,,default,,,,,
+data_received,1595325561,11045.000000,,,,,,,,default,,,,,
+iteration_duration,1595325561,1449.049580,,,,,,,,default,,,,,
+iterations,1595325561,1.000000,,,,,,,,default,,,,,
+```
+
+**CSV Configuration:**
+
+| Option | Environment Variable | Description | Default |
+|--------|---------------------|-------------|--------|
+| `saveInterval` | `K6_CSV_SAVE_INTERVAL` | How often to flush data | `1s` |
+| `timeFormat` | `K6_CSV_TIME_FORMAT` | Timestamp format: `unix`, `unix_nano`, `unix_micro`, `unix_milli`, `rfc3339`, `rfc3339_nano` | `unix` |
+| `fileName` | `K6_CSV_FILENAME` | Output file path | `file.csv` |
+
+**Monitor in real time:**
+
+```sh
+# In terminal 1
+k6 run --out csv=results.csv script.js
+
+# In terminal 2
+tail -f results.csv
+```
+
+### JSON Output
+
+JSON output provides structured data with complete metric metadata:
+
+```sh
+k6 run --out json=test_results.json script.js
+```
+
+Or compressed:
+
+```sh
+k6 run --out json=test_results.gz script.js
+```
+
+**JSON Format:**
+
+Each line contains either a metric definition or a data point:
+
+```json
+{"type":"Metric","data":{"type":"gauge","contains":"default","tainted":null,"thresholds":[],"submetrics":null},"metric":"vus"}
+{"type":"Point","data":{"time":"2017-05-09T14:34:45.625742514+02:00","value":5,"tags":null},"metric":"vus"}
+{"type":"Metric","data":{"type":"trend","contains":"time","tainted":null,"thresholds":["avg<1000"],"submetrics":null},"metric":"http_req_duration"}
+{"type":"Point","data":{"time":"2017-05-09T14:34:45.239531499+02:00","value":459.865729,"tags":{"group":"::my group::json","method":"GET","status":"200","url":"https://test.k6.io/api/tools"}},"metric":"http_req_duration"}
+```
+
+**Process with jq:**
+
+```sh
+# Filter specific metrics
+jq '. | select(.type=="Point" and .metric == "http_req_duration" and .data.tags.status >= "200")' results.json
+
+# Calculate average
+jq '. | select(.type=="Point" and .metric == "http_req_duration") | .data.value' results.json | jq -s 'add/length'
+
+# Find min/max
+jq '. | select(.type=="Point" and .metric == "http_req_duration") | .data.value' results.json | jq -s min
+jq '. | select(.type=="Point" and .metric == "http_req_duration") | .data.value' results.json | jq -s max
+```
+
+<Info>
+For the aggregated end-of-test summary as JSON, use the `handleSummary()` function instead of `--out json`.
+</Info>
+
+## Output to Services
+
+k6 can stream metrics to various external services and databases:
+
+<Tabs>
+  <Tab title="Grafana Cloud">
+    Stream directly to Grafana Cloud k6 for managed storage and visualization:
+
+    ```sh
+    k6 run --out cloud script.js
+    ```
+
+    Requires a Grafana Cloud k6 account.
+  </Tab>
+  <Tab title="InfluxDB">
+    **InfluxDB v1** (built-in support):
+
+    ```sh
+    k6 run --out influxdb=http://localhost:8086/myk6db script.js
+    ```
+
+    **InfluxDB v2** (requires extension):
+
+    ```sh
+    # Build custom k6 with extension
+    xk6 build --with github.com/grafana/xk6-output-influxdb
+
+    # Run with configuration
+    K6_INFLUXDB_ORGANIZATION="my-org" \
+    K6_INFLUXDB_BUCKET="k6-results" \
+    K6_INFLUXDB_TOKEN="my-token" \
+    K6_INFLUXDB_ADDR="http://localhost:8086" \
+    ./k6 run -o xk6-influxdb script.js
+    ```
+  </Tab>
+  <Tab title="Prometheus">
+    Stream to Prometheus using remote write:
+
+    ```sh
+    k6 run --out experimental-prometheus-rw script.js
+    ```
+
+    Configure with environment variables:
+
+    ```sh
+    K6_PROMETHEUS_RW_SERVER_URL=http://localhost:9090/api/v1/write \
+    K6_PROMETHEUS_RW_TREND_AS_NATIVE_HISTOGRAM=true \
+    k6 run --out experimental-prometheus-rw script.js
+    ```
+  </Tab>
+  <Tab title="Other Services">
+    k6 supports many other services:
+
+    - **Amazon CloudWatch**
+    - **Apache Kafka**
+    - **Datadog**
+    - **Dynatrace**
+    - **Elasticsearch**
+    - **Grafana Cloud Prometheus**
+    - **Netdata**
+    - **New Relic**
+    - **OpenTelemetry**
+    - **TimescaleDB**
+    - **StatsD**
+
+    Most require extensions built with xk6.
+  </Tab>
+</Tabs>
+
+### InfluxDB Example
+
+Here's a complete workflow for streaming to InfluxDB v2:
+
+<Steps>
+  <Step title="Install xk6">
+    ```sh
+    go install go.k6.io/xk6/cmd/xk6@latest
+    ```
+  </Step>
+  <Step title="Build k6 with extension">
+    ```sh
+    xk6 build --with github.com/grafana/xk6-output-influxdb
+    ```
+  </Step>
+  <Step title="Run test">
+    ```sh
+    K6_INFLUXDB_ORGANIZATION="my-org" \
+    K6_INFLUXDB_BUCKET="k6-results" \
+    K6_INFLUXDB_TOKEN="my-token" \
+    K6_INFLUXDB_ADDR="http://localhost:8086" \
+    ./k6 run -o xk6-influxdb script.js
+    ```
+  </Step>
+  <Step title="Visualize in Grafana">
+    Connect Grafana to your InfluxDB instance and use pre-built dashboards or create custom ones.
+  </Step>
+</Steps>
+
+**InfluxDB v2 Configuration Options:**
+
+| Environment Variable | Default | Description |
+|---------------------|---------|-------------|
+| `K6_INFLUXDB_ORGANIZATION` | - | InfluxDB organization name |
+| `K6_INFLUXDB_BUCKET` | - | Bucket name for k6 metrics |
+| `K6_INFLUXDB_TOKEN` | - | API token for authentication |
+| `K6_INFLUXDB_ADDR` | `http://localhost:8086` | InfluxDB server address |
+| `K6_INFLUXDB_PUSH_INTERVAL` | `1s` | Metric flush frequency |
+| `K6_INFLUXDB_CONCURRENT_WRITES` | `4` | Number of concurrent write requests |
+| `K6_INFLUXDB_TAGS_AS_FIELDS` | `vu:int,iter:int,url` | Comma-separated tags to store as fields |
+| `K6_INFLUXDB_INSECURE` | `false` | Skip HTTPS certificate verification |
+
+## Multiple Outputs
+
+You can stream to multiple destinations simultaneously:
+
+```sh
+k6 run \
+  --out json=results.json \
+  --out influxdb=http://localhost:8086/k6db \
+  --out csv=results.csv \
+  script.js
+```
+
+This is useful for:
+- Archiving raw data while monitoring in real time
+- Sending to multiple monitoring systems
+- Creating backups of test results
+
+## Docker Example
+
+Stream results when running k6 in Docker:
+
+```sh
+docker run -it --rm \
+  -v $(pwd):/scripts \
+  -v $(pwd)/results:/output \
+  grafana/k6 run \
+  --out json=/output/results.json \
+  /scripts/script.js
+```
+
+<Warning>
+Ensure the Docker user has write permissions to the output directory.
+</Warning>
+
+## Performance Considerations
+
+<Note>
+Streaming real-time metrics can impact test performance, especially at high load. Consider:
+
+- Increasing `saveInterval` or `pushInterval` for high-throughput tests
+- Using efficient backends (InfluxDB, Prometheus) instead of JSON files
+- Running k6 and the monitoring backend on separate machines
+- Monitoring the resource usage of both k6 and the output backend
+</Note>
+
+## Building Custom Output Extensions
+
+You can create your own output format using xk6:
+
+```go
+package myoutput
+
+import (
+    "go.k6.io/k6/output"
+)
+
+func init() {
+    output.RegisterExtension("myoutput", New)
+}
+
+func New(params output.Params) (output.Output, error) {
+    // Your implementation
+}
+```
+
+For details, see the [output extension documentation](https://grafana.com/docs/k6/latest/extensions/create/output-extensions).
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Grafana Dashboards" icon="chart-area" href="/results/grafana-dashboards">
+    Visualize real-time metrics with Grafana
+  </Card>
+  <Card title="Web Dashboard" icon="chart-line" href="/results/web-dashboard">
+    Use the built-in web dashboard for live monitoring
+  </Card>
+  <Card title="Metrics Reference" icon="gauge" href="https://grafana.com/docs/k6/latest/using-k6/metrics">
+    Learn about all available k6 metrics
+  </Card>
+  <Card title="Output Extensions" icon="plug" href="https://grafana.com/docs/k6/latest/extensions/create/output-extensions">
+    Build custom output formats
+  </Card>
+</CardGroup>

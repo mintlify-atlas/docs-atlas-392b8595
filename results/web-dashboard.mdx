@@ -1,0 +1,446 @@
+---
+title: Web Dashboard
+description: Use the k6 built-in web dashboard to monitor tests in real time and generate shareable HTML reports.
+---
+
+# Web Dashboard
+
+k6 includes a built-in web dashboard that provides real-time visualization of your test results. The dashboard helps you monitor performance as your test runs and can generate downloadable HTML reports for sharing with your team.
+
+<img src="/images/web-dashboard-overview.png" alt="k6 web dashboard showing real-time test metrics" />
+
+## Features
+
+The web dashboard offers:
+
+<CardGroup cols={2}>
+  <Card title="Real-Time Metrics" icon="gauge">
+    Watch test performance live with updating graphs and statistics
+  </Card>
+  <Card title="HTML Reports" icon="file-export">
+    Generate self-contained reports for sharing and archiving
+  </Card>
+  <Card title="Zero Setup" icon="bolt">
+    Built into k6 - no additional tools or services required
+  </Card>
+  <Card title="Interactive Graphs" icon="chart-line">
+    Zoom, pan, and explore metrics during and after test runs
+  </Card>
+</CardGroup>
+
+## Quick Start
+
+Enable the web dashboard using the `K6_WEB_DASHBOARD` environment variable:
+
+```sh
+K6_WEB_DASHBOARD=true k6 run script.js
+```
+
+**Output:**
+
+```text
+         /\      Grafana   /‾‾/
+    /\  /  \     |\  __   /  /
+   /  \/    \    | |/ /  /   ‾‾\
+  /          \   |   (  |  (‾)  |
+ / __________ \  |_|\_\  \_____/
+
+     execution: local
+        script: script.js
+ web dashboard: http://127.0.0.1:5665
+        output: -
+```
+
+Open your browser to **http://127.0.0.1:5665** to view the dashboard.
+
+## Dashboard Interface
+
+The web dashboard displays:
+
+### Overview Section
+
+- **Test progress** - Visual progress bar and elapsed time
+- **Virtual users** - Current, min, and max VUs
+- **Request statistics** - Total requests, request rate, error rate
+- **Response times** - Current p95, p99, and average response times
+
+### Metrics Section
+
+**HTTP Metrics:**
+- Request duration (blocked, connecting, TLS, sending, waiting, receiving)
+- Request rates and counts
+- Error rates
+
+**Execution Metrics:**
+- Iteration duration
+- VUs over time
+- Data sent/received
+
+**Custom Metrics:**
+- Any custom metrics defined in your test
+
+### Thresholds Section
+
+- Real-time threshold status (passing/failing)
+- Threshold values and limits
+- Visual indicators for threshold violations
+
+### Checks Section
+
+- Check pass/fail counts
+- Success percentages
+- Individual check status
+
+## Configuration
+
+Customize the dashboard behavior with environment variables:
+
+<Tabs>
+  <Tab title="Basic">
+    ```sh
+    # Enable dashboard
+    K6_WEB_DASHBOARD=true k6 run script.js
+
+    # Custom port
+    K6_WEB_DASHBOARD=true \
+    K6_WEB_DASHBOARD_PORT=8080 \
+    k6 run script.js
+
+    # Bind to all interfaces (remote access)
+    K6_WEB_DASHBOARD=true \
+    K6_WEB_DASHBOARD_HOST=0.0.0.0 \
+    k6 run script.js
+    ```
+  </Tab>
+  <Tab title="Advanced">
+    ```sh
+    # Auto-open in browser
+    K6_WEB_DASHBOARD=true \
+    K6_WEB_DASHBOARD_OPEN=true \
+    k6 run script.js
+
+    # Custom update frequency
+    K6_WEB_DASHBOARD=true \
+    K6_WEB_DASHBOARD_PERIOD=5s \
+    k6 run script.js
+
+    # Export HTML report on completion
+    K6_WEB_DASHBOARD=true \
+    K6_WEB_DASHBOARD_EXPORT=report.html \
+    k6 run script.js
+    ```
+  </Tab>
+  <Tab title="CI/CD">
+    ```sh
+    # Disable HTTP server (CI/CD mode)
+    K6_WEB_DASHBOARD=true \
+    K6_WEB_DASHBOARD_PORT=-1 \
+    K6_WEB_DASHBOARD_EXPORT=report.html \
+    k6 run script.js
+    ```
+
+    This configuration:
+    - Generates metrics for report
+    - Skips starting web server
+    - Exports HTML report on completion
+    - Allows k6 to exit immediately
+  </Tab>
+</Tabs>
+
+### Configuration Options
+
+| Environment Variable | Description | Default |
+|---------------------|-------------|--------|
+| `K6_WEB_DASHBOARD` | Enable the web dashboard | `false` |
+| `K6_WEB_DASHBOARD_HOST` | Host to bind the server to | `localhost` |
+| `K6_WEB_DASHBOARD_PORT` | Port to bind the server to (use `-1` to disable) | `5665` |
+| `K6_WEB_DASHBOARD_PERIOD` | Update frequency for metrics | `10s` |
+| `K6_WEB_DASHBOARD_OPEN` | Auto-open dashboard in browser | `false` |
+| `K6_WEB_DASHBOARD_EXPORT` | Auto-export HTML report to file | `` (disabled) |
+
+## HTML Reports
+
+Generate shareable HTML reports directly from the dashboard:
+
+### From the Dashboard UI
+
+1. Run your test with the dashboard enabled
+2. Click the **Report** button in the dashboard menu
+3. The report downloads as an HTML file
+
+<img src="/images/web-dashboard-report-button.png" alt="Report button in web dashboard" />
+
+### From Command Line
+
+Auto-generate reports when the test completes:
+
+```sh
+K6_WEB_DASHBOARD=true \
+K6_WEB_DASHBOARD_EXPORT=test-report-$(date +%Y%m%d-%H%M%S).html \
+k6 run script.js
+```
+
+### Report Features
+
+The generated HTML report:
+
+- **Self-contained** - Single file with embedded assets
+- **Interactive** - Graphs are still zoomable and explorable
+- **Shareable** - Email or upload anywhere
+- **Archive-friendly** - Stores complete test history
+
+<img src="/images/web-dashboard-report.png" alt="Example HTML test report" />
+
+<Note>
+Reports only include graphs if test duration exceeds 3× the aggregation period (default: 30 seconds).
+</Note>
+
+## Use Cases
+
+<Tabs>
+  <Tab title="Local Development">
+    Monitor tests during development:
+
+    ```sh
+    # Quick feedback loop
+    K6_WEB_DASHBOARD=true \
+    K6_WEB_DASHBOARD_OPEN=true \
+    k6 run script.js
+    ```
+
+    **Benefits:**
+    - See results immediately
+    - Iterate quickly on test scripts
+    - Debug issues in real time
+  </Tab>
+  <Tab title="Team Collaboration">
+    Share results with stakeholders:
+
+    ```sh
+    # Generate report for sharing
+    K6_WEB_DASHBOARD=true \
+    K6_WEB_DASHBOARD_EXPORT=results/test-$(date +%Y%m%d).html \
+    k6 run script.js
+    ```
+
+    **Benefits:**
+    - Non-technical stakeholders can view results
+    - No need to access test infrastructure
+    - Results can be archived long-term
+  </Tab>
+  <Tab title="CI/CD Integration">
+    Generate reports in pipelines:
+
+    ```yaml .github/workflows/load-test.yml
+    name: Load Test
+    on: [push]
+    jobs:
+      test:
+        runs-on: ubuntu-latest
+        steps:
+          - uses: actions/checkout@v3
+          - name: Run k6 test
+            uses: grafana/k6-action@v0.3.1
+            with:
+              filename: test.js
+            env:
+              K6_WEB_DASHBOARD: true
+              K6_WEB_DASHBOARD_PORT: -1
+              K6_WEB_DASHBOARD_EXPORT: report.html
+          - name: Upload report
+            uses: actions/upload-artifact@v3
+            with:
+              name: k6-report
+              path: report.html
+    ```
+  </Tab>
+</Tabs>
+
+## Example Test
+
+Here's a complete example showing the dashboard in action:
+
+```javascript test.js
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+import { Trend } from 'k6/metrics';
+
+// Custom metric for dashboard
+const customWaitTime = new Trend('custom_wait_time');
+
+export const options = {
+  stages: [
+    { duration: '30s', target: 10 },
+    { duration: '1m', target: 10 },
+    { duration: '30s', target: 0 },
+  ],
+  thresholds: {
+    http_req_duration: ['p(95)<500'],
+    http_req_failed: ['rate<0.01'],
+    custom_wait_time: ['avg<300'],
+  },
+};
+
+export default function () {
+  const startTime = Date.now();
+  
+  const res = http.get('https://test.k6.io');
+  
+  check(res, {
+    'status is 200': (r) => r.status === 200,
+    'response time < 500ms': (r) => r.timings.duration < 500,
+    'has content': (r) => r.body.length > 0,
+  });
+  
+  const waitTime = Date.now() - startTime;
+  customWaitTime.add(waitTime);
+  
+  sleep(1);
+}
+```
+
+**Run with dashboard:**
+
+```sh
+K6_WEB_DASHBOARD=true \
+K6_WEB_DASHBOARD_OPEN=true \
+K6_WEB_DASHBOARD_EXPORT=report.html \
+k6 run test.js
+```
+
+The dashboard will show:
+- Real-time request metrics
+- Threshold status (3 thresholds)
+- Check results (3 checks)
+- Custom metric (custom_wait_time)
+- VU ramping stages
+
+## Tips and Best Practices
+
+<AccordionGroup>
+  <Accordion title="Dashboard won't exit after test">
+    The k6 process waits while browser windows are open. To exit immediately:
+
+    - Close the browser window, or
+    - Set `K6_WEB_DASHBOARD_PORT=-1` for CI/CD, or
+    - Use `Ctrl+C` to force quit
+  </Accordion>
+  <Accordion title="Remote access to dashboard">
+    To access the dashboard from another machine:
+
+    ```sh
+    K6_WEB_DASHBOARD=true \
+    K6_WEB_DASHBOARD_HOST=0.0.0.0 \
+    K6_WEB_DASHBOARD_PORT=5665 \
+    k6 run script.js
+    ```
+
+    Then access via `http://<server-ip>:5665`
+
+    **Security Warning:** Only bind to `0.0.0.0` in trusted networks.
+  </Accordion>
+  <Accordion title="Dashboard performance impact">
+    The dashboard has minimal overhead but can impact high-load tests:
+
+    - Increase `K6_WEB_DASHBOARD_PERIOD` for very high RPS
+    - Consider disabling for maximum performance tests
+    - Use `--out` options for zero-overhead metrics collection
+  </Accordion>
+  <Accordion title="Organizing reports">
+    Create a structured naming convention:
+
+    ```sh
+    # Include timestamp and test name
+    export REPORT="reports/$(basename $TEST)-$(date +%Y%m%d-%H%M%S).html"
+    K6_WEB_DASHBOARD=true K6_WEB_DASHBOARD_EXPORT=$REPORT k6 run $TEST
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Comparison with Other Outputs
+
+<Tabs>
+  <Tab title="Web Dashboard">
+    **Best for:**
+    - Local development
+    - Quick visual feedback
+    - Sharing with non-technical users
+    - No additional infrastructure
+
+    **Limitations:**
+    - Only one test at a time
+    - No historical comparison
+    - Limited to test duration
+  </Tab>
+  <Tab title="Grafana Dashboard">
+    **Best for:**
+    - Production monitoring
+    - Multiple concurrent tests
+    - Historical trend analysis
+    - Correlation with system metrics
+
+    **Limitations:**
+    - Requires Grafana + backend (InfluxDB, etc.)
+    - More complex setup
+    - Infrastructure to maintain
+  </Tab>
+  <Tab title="Grafana Cloud k6">
+    **Best for:**
+    - Enterprise teams
+    - Cloud-distributed tests
+    - Managed service
+    - Advanced features
+
+    **Limitations:**
+    - Paid service
+    - Requires account
+  </Tab>
+</Tabs>
+
+## Troubleshooting
+
+<Warning>
+**Port already in use:**
+
+```text
+Error: listen tcp 127.0.0.1:5665: bind: address already in use
+```
+
+Solution: Change the port or stop the conflicting service:
+
+```sh
+K6_WEB_DASHBOARD=true K6_WEB_DASHBOARD_PORT=8080 k6 run script.js
+```
+</Warning>
+
+<Warning>
+**Empty or missing graphs in report:**
+
+Reports only include graphs if test duration > 3× the period.
+
+For a 10s period (default), run tests for at least 30 seconds:
+
+```javascript
+export const options = {
+  duration: '30s', // Minimum for graphs
+  vus: 10,
+};
+```
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="End-of-Test Summary" icon="flag-checkered" href="/results/end-of-test">
+    Understand the default text summary output
+  </Card>
+  <Card title="Real-Time Streaming" icon="stream" href="/results/real-time">
+    Stream metrics to external services
+  </Card>
+  <Card title="Grafana Dashboards" icon="chart-area" href="/results/grafana-dashboards">
+    Create advanced visualizations with Grafana
+  </Card>
+  <Card title="Custom Metrics" icon="gauge" href="https://grafana.com/docs/k6/latest/using-k6/metrics#custom-metrics">
+    Add custom metrics to your tests
+  </Card>
+</CardGroup>

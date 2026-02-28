@@ -1,0 +1,378 @@
+---
+title: 'Options'
+description: 'Learn how to configure k6 test behavior using options, including where to set them and how they override each other.'
+---
+
+Options configure how your k6 test runs. They control aspects like virtual users, duration, thresholds, tags, and many other test behaviors.
+
+## What are options?
+
+Options determine test execution parameters such as:
+
+- Number of virtual users (VUs)
+- Test duration or iterations
+- Thresholds for pass/fail criteria
+- Tags for organizing metrics
+- Scenarios for complex workload patterns
+- Network settings and timeouts
+
+Options provide the configuration layer that controls your test execution, separate from the test logic itself.
+
+## Where to set options
+
+k6 provides multiple places to define options, each suited for different use cases:
+
+<Tabs>
+  <Tab title="Script options">
+    Set options in your test script using the `options` object. This is the recommended approach for most cases.
+    
+    ```javascript
+    import http from 'k6/http';
+    
+    export const options = {
+      vus: 10,
+      duration: '30s',
+      thresholds: {
+        http_req_duration: ['p(95)<200'],
+      },
+    };
+    
+    export default function () {
+      http.get('http://test.k6.io/');
+    }
+    ```
+    
+    **Benefits:**
+    - Version controlled with your test
+    - Easy to reuse and share
+    - Self-documenting
+  </Tab>
+  
+  <Tab title="CLI flags">
+    Override options using command-line flags when running tests.
+    
+    ```bash
+    k6 run --vus 20 --duration 1m script.js
+    ```
+    
+    **Benefits:**
+    - Quick one-time adjustments
+    - Override script options for testing
+    - Useful in CI/CD pipelines
+  </Tab>
+  
+  <Tab title="Environment variables">
+    Set options using environment variables with the `K6_` prefix.
+    
+    ```bash
+    K6_VUS=10 K6_DURATION=30s k6 run script.js
+    ```
+    
+    **Benefits:**
+    - Configure from CI/CD environment
+    - Store in Docker/Kubernetes configs
+    - Separate config from code
+  </Tab>
+  
+  <Tab title="Config file">
+    Use a JSON configuration file with the `--config` flag.
+    
+    ```bash
+    k6 run --config options.json script.js
+    ```
+    
+    ```json
+    {
+      "vus": 10,
+      "duration": "30s",
+      "thresholds": {
+        "http_req_duration": ["p(95)<200"]
+      }
+    }
+    ```
+    
+    **Benefits:**
+    - Reuse configs across multiple tests
+    - Separate complex configs from scripts
+  </Tab>
+</Tabs>
+
+## Order of precedence
+
+When options are set in multiple places, k6 uses this precedence order (highest to lowest):
+
+<Steps>
+  <Step title="CLI flags (highest)">
+    Command-line flags override everything else
+  </Step>
+  
+  <Step title="Environment variables">
+    K6_ prefixed environment variables
+  </Step>
+  
+  <Step title="Script options">
+    Options exported in the test script
+  </Step>
+  
+  <Step title="Config file">
+    Options from --config file
+  </Step>
+  
+  <Step title="Defaults (lowest)">
+    k6's built-in default values
+  </Step>
+</Steps>
+
+![Options precedence diagram](/media/docs/k6-oss/order-of-precedence.png)
+
+<Note>
+  **CLI flags have the highest precedence.** They override all other option sources.
+</Note>
+
+## Common options
+
+Here are the most frequently used options:
+
+### Virtual users and duration
+
+<CodeGroup>
+```javascript Fixed VUs
+export const options = {
+  vus: 10,           // Number of virtual users
+  duration: '30s',   // How long to run
+};
+```
+
+```javascript Ramping VUs
+export const options = {
+  stages: [
+    { duration: '30s', target: 10 },  // Ramp up to 10 VUs
+    { duration: '1m', target: 10 },   // Stay at 10 VUs
+    { duration: '30s', target: 0 },   // Ramp down to 0
+  ],
+};
+```
+
+```javascript Iterations
+export const options = {
+  vus: 10,
+  iterations: 100,  // Total iterations across all VUs
+};
+```
+</CodeGroup>
+
+### Thresholds
+
+Define pass/fail criteria:
+
+```javascript
+export const options = {
+  thresholds: {
+    http_req_failed: ['rate<0.01'],    // Less than 1% errors
+    http_req_duration: ['p(95)<200'],  // 95% under 200ms
+    checks: ['rate>0.9'],              // 90% of checks pass
+  },
+};
+```
+
+### Tags
+
+Add tags to all metrics:
+
+```javascript
+export const options = {
+  tags: {
+    environment: 'staging',
+    team: 'backend',
+  },
+};
+```
+
+### Scenarios
+
+Define complex workload patterns:
+
+```javascript
+export const options = {
+  scenarios: {
+    load_test: {
+      executor: 'ramping-vus',
+      startVUs: 0,
+      stages: [
+        { duration: '1m', target: 50 },
+        { duration: '3m', target: 50 },
+        { duration: '1m', target: 0 },
+      ],
+    },
+  },
+};
+```
+
+## Complete example
+
+Here's a comprehensive example showing various options:
+
+```javascript
+import http from 'k6/http';
+import { sleep } from 'k6';
+
+export const options = {
+  // Load pattern
+  stages: [
+    { duration: '30s', target: 10 },
+    { duration: '1m', target: 10 },
+    { duration: '30s', target: 0 },
+  ],
+  
+  // Pass/fail criteria
+  thresholds: {
+    http_req_failed: ['rate<0.01'],
+    http_req_duration: ['p(95)<500', 'p(99)<1000'],
+    checks: ['rate>0.95'],
+  },
+  
+  // Tags for all metrics
+  tags: {
+    test_type: 'load',
+    environment: 'production',
+  },
+  
+  // Network settings
+  noConnectionReuse: false,
+  userAgent: 'MyK6LoadTest/1.0',
+  
+  // Limits
+  maxRedirects: 10,
+};
+
+const baseUrl = __ENV.BASE_URL || 'https://test.k6.io';
+
+export default function () {
+  http.get(baseUrl);
+  sleep(1);
+}
+```
+
+## Using environment variables in options
+
+Reference environment variables in your script options:
+
+```javascript
+import http from 'k6/http';
+
+export const options = {
+  vus: __ENV.VUS || 10,
+  duration: __ENV.DURATION || '30s',
+  thresholds: {
+    http_req_duration: [`p(95)<${__ENV.P95_THRESHOLD || 200}`],
+  },
+};
+
+export default function () {
+  http.get(__ENV.BASE_URL || 'https://test.k6.io');
+}
+```
+
+Run with custom values:
+
+```bash
+k6 run --env VUS=20 --env DURATION=1m --env BASE_URL=https://example.com script.js
+```
+
+## Accessing options at runtime
+
+Access the resolved option values during test execution:
+
+```javascript
+import exec from 'k6/execution';
+
+export const options = {
+  stages: [
+    { duration: '5s', target: 100 },
+    { duration: '5s', target: 50 },
+  ],
+};
+
+export default function () {
+  // Access the first stage's target
+  const firstStageTarget = exec.test.options.scenarios.default.stages[0].target;
+  console.log(`First stage target: ${firstStageTarget}`); // 100
+}
+```
+
+## Override examples
+
+<CodeGroup>
+```bash Override duration
+# Script has duration: '30s'
+k6 run --duration 1m script.js
+# Runs for 1 minute instead
+```
+
+```bash Override VUs
+# Script has vus: 10
+k6 run --vus 50 script.js
+# Runs with 50 VUs instead
+```
+
+```bash Multiple overrides
+k6 run --vus 20 --duration 2m --no-connection-reuse script.js
+```
+</CodeGroup>
+
+## Using config files
+
+Create a reusable config file:
+
+```json options.json
+{
+  "vus": 10,
+  "duration": "30s",
+  "thresholds": {
+    "http_req_failed": ["rate<0.01"],
+    "http_req_duration": ["p(95)<200"]
+  },
+  "tags": {
+    "environment": "staging"
+  }
+}
+```
+
+Use it with your test:
+
+```bash
+k6 run --config options.json script.js
+```
+
+Or load it in your script:
+
+```javascript
+const testConfig = JSON.parse(open('./config/test.json'));
+export const options = testConfig;
+```
+
+## Best practices
+
+<CardGroup cols={2}>
+  <Card title="Use script options" icon="file-code">
+    Keep options in your script for version control and easy reuse.
+  </Card>
+  
+  <Card title="CLI for overrides" icon="terminal">
+    Use CLI flags to quickly test variations without editing the script.
+  </Card>
+  
+  <Card title="Environment variables for CI/CD" icon="gear">
+    Use env vars to configure tests differently across environments.
+  </Card>
+  
+  <Card title="Document your options" icon="book">
+    Add comments explaining why you chose specific option values.
+  </Card>
+</CardGroup>
+
+## Next steps
+
+<Card title="Options Reference" icon="list" href="/reference/options">
+  See the complete list of all available options with detailed descriptions
+</Card>

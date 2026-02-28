@@ -1,0 +1,265 @@
+---
+title: k6/crypto
+description: Cryptographic functions for hashing, HMAC, and random number generation
+---
+
+The k6/crypto module provides common hashing and cryptographic functionality.
+
+## Import
+
+```javascript
+import crypto from 'k6/crypto';
+```
+
+## Hash Functions
+
+### createHash()
+
+Creates a Hasher object that can be fed with data repeatedly to generate hash digests.
+
+<ParamField path="algorithm" type="string" required>
+  The hashing algorithm to use. One of: `"md4"`, `"md5"`, `"sha1"`, `"sha256"`, `"sha384"`, `"sha512"`, `"sha512_224"`, `"sha512_256"`, `"ripemd160"`.
+</ParamField>
+
+<ResponseField name="return" type="Hasher">
+  A Hasher object with `update(data)` and `digest(encoding)` methods.
+</ResponseField>
+
+```javascript
+import crypto from 'k6/crypto';
+
+export default function () {
+  console.log(crypto.sha256('hello world!', 'hex'));
+  const hasher = crypto.createHash('sha256');
+  hasher.update('hello ');
+  hasher.update('world!');
+  console.log(hasher.digest('hex'));
+}
+```
+
+**Output:**
+```
+INFO[0000] 7509e5bda0c762d2bac7f90d758b5b2263fa01ccbc542ab5e3df163be08e6ca9
+INFO[0000] 7509e5bda0c762d2bac7f90d758b5b2263fa01ccbc542ab5e3df163be08e6ca9
+```
+
+---
+
+### createHMAC()
+
+Creates an HMAC hashing object for generating signed hash digests.
+
+<ParamField path="algorithm" type="string" required>
+  The hashing algorithm. One of: `"md4"`, `"md5"`, `"sha1"`, `"sha256"`, `"sha384"`, `"sha512"`, `"sha512_224"`, `"sha512_256"`, `"ripemd160"`.
+</ParamField>
+
+<ParamField path="secret" type="string | ArrayBuffer" required>
+  A shared secret used to sign the data.
+</ParamField>
+
+<ResponseField name="return" type="Hasher">
+  A Hasher object with `update(data)` and `digest(encoding)` methods.
+</ResponseField>
+
+```javascript
+import crypto from 'k6/crypto';
+
+export default function () {
+  console.log(crypto.hmac('sha256', 'a secret', 'my data', 'hex'));
+  const hasher = crypto.createHMAC('sha256', 'a secret');
+  hasher.update('my ');
+  hasher.update('data');
+  console.log(hasher.digest('hex'));
+}
+```
+
+**Output:**
+```
+INFO[0000] 82f669c8fde13aef6d6977257588dc4953dfac505428f8fd6b52e19cd96d7ea5
+INFO[0000] 82f669c8fde13aef6d6977257588dc4953dfac505428f8fd6b52e19cd96d7ea5
+```
+
+---
+
+## Direct Hash Functions
+
+### md5()
+
+Computes MD5 hash of input data.
+
+<ParamField path="input" type="string | ArrayBuffer" required>
+  The input string or ArrayBuffer to hash.
+</ParamField>
+
+<ParamField path="outputEncoding" type="string" required>
+  Output encoding: `"base64"`, `"base64url"`, `"base64rawurl"`, `"hex"`, or `"binary"`.
+</ParamField>
+
+<ResponseField name="return" type="string | Array">
+  Hash digest as string or array of integers (for binary encoding).
+</ResponseField>
+
+```javascript
+import crypto from 'k6/crypto';
+
+export default function () {
+  let hash = crypto.md5('hello world!', 'hex');
+  console.log(hash);
+  const binArray = [104, 101, 108, 108, 111, 32, 119, 111, 114, 108, 100, 33];
+  hash = crypto.md5(new Uint8Array(binArray).buffer, 'hex');
+  console.log(hash);
+}
+```
+
+**Output:**
+```
+INFO[0000] fc3ff98e8c6a0d3087d515c0473f8677
+INFO[0000] fc3ff98e8c6a0d3087d515c0473f8677
+```
+
+---
+
+### sha256()
+
+Computes SHA-256 hash of input data.
+
+<ParamField path="input" type="string | ArrayBuffer" required>
+  The input string or ArrayBuffer to hash.
+</ParamField>
+
+<ParamField path="outputEncoding" type="string" required>
+  Output encoding: `"base64"`, `"base64url"`, `"base64rawurl"`, `"hex"`, or `"binary"`.
+</ParamField>
+
+<ResponseField name="return" type="string | Array">
+  Hash digest as string or array of integers (for binary encoding).
+</ResponseField>
+
+```javascript
+import crypto from 'k6/crypto';
+
+export default function () {
+  let hash = crypto.sha256('hello world!', 'hex');
+  console.log(hash);
+  const binArray = [104, 101, 108, 108, 111, 32, 119, 111, 114, 108, 100, 33];
+  hash = crypto.sha256(new Uint8Array(binArray).buffer, 'hex');
+  console.log(hash);
+}
+```
+
+**Output:**
+```
+INFO[0000] 7509e5bda0c762d2bac7f90d758b5b2263fa01ccbc542ab5e3df163be08e6ca9
+INFO[0000] 7509e5bda0c762d2bac7f90d758b5b2263fa01ccbc542ab5e3df163be08e6ca9
+```
+
+---
+
+### Other Hash Functions
+
+All hash functions follow the same signature as `md5()` and `sha256()`:
+
+<CardGroup cols={2}>
+  <Card title="md4()" icon="hashtag">
+    MD4 hashing algorithm
+  </Card>
+  <Card title="sha1()" icon="hashtag">
+    SHA-1 hashing algorithm
+  </Card>
+  <Card title="sha384()" icon="hashtag">
+    SHA-384 hashing algorithm
+  </Card>
+  <Card title="sha512()" icon="hashtag">
+    SHA-512 hashing algorithm
+  </Card>
+  <Card title="sha512_224()" icon="hashtag">
+    SHA-512/224 hashing algorithm
+  </Card>
+  <Card title="sha512_256()" icon="hashtag">
+    SHA-512/256 hashing algorithm
+  </Card>
+  <Card title="ripemd160()" icon="hashtag">
+    RIPEMD-160 hashing algorithm
+  </Card>
+  <Card title="hmac()" icon="key">
+    HMAC with any supported algorithm
+  </Card>
+</CardGroup>
+
+---
+
+## Random Generation
+
+### randomBytes()
+
+Generates cryptographically random bytes.
+
+<ParamField path="int" type="integer" required>
+  The length of the returned ArrayBuffer.
+</ParamField>
+
+<ResponseField name="return" type="ArrayBuffer">
+  An ArrayBuffer with cryptographically random bytes.
+</ResponseField>
+
+```javascript
+import crypto from 'k6/crypto';
+
+export default function () {
+  const bytes = crypto.randomBytes(42);
+  const view = new Uint8Array(bytes);
+  console.log(view); // [156, 71, 245, 191, 56, ...]
+}
+```
+
+<Info>
+Use `randomBytes()` for cryptographically secure random data. For non-cryptographic randomness, use `Math.random()`.
+</Info>
+
+## Output Encodings
+
+All hash functions support these output encodings:
+
+- `"hex"` - Hexadecimal string (most common)
+- `"base64"` - Standard base64 encoding
+- `"base64url"` - URL-safe base64 encoding
+- `"base64rawurl"` - URL-safe base64 without padding
+- `"binary"` - Array of integers (0-255)
+
+## Use Cases
+
+<AccordionGroup>
+  <Accordion title="Request signing">
+    Generate HMAC signatures for API authentication:
+    ```javascript
+    const signature = crypto.hmac('sha256', API_SECRET, requestBody, 'hex');
+    ```
+  </Accordion>
+
+  <Accordion title="Password hashing">
+    Hash passwords before sending (though use bcrypt/argon2 in production):
+    ```javascript
+    const hashedPassword = crypto.sha256(password, 'hex');
+    ```
+  </Accordion>
+
+  <Accordion title="Data integrity">
+    Verify file or data integrity:
+    ```javascript
+    const checksum = crypto.md5(fileData, 'hex');
+    ```
+  </Accordion>
+
+  <Accordion title="Token generation">
+    Generate random tokens or IDs:
+    ```javascript
+    const token = crypto.randomBytes(32);
+    const tokenHex = new Uint8Array(token).reduce((str, byte) => 
+      str + byte.toString(16).padStart(2, '0'), '');
+    ```
+  </Accordion>
+</AccordionGroup>
+
+<Warning>
+MD4 and MD5 are cryptographically broken. Use them only for non-security purposes like checksums. For security, use SHA-256 or higher.
+</Warning>

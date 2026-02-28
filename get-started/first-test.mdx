@@ -1,0 +1,406 @@
+---
+title: Write Your First Test
+description: Learn how to write, run, and configure your first k6 load test script using JavaScript.
+---
+
+# Write your first test
+
+k6 tests are written using JavaScript, making them accessible to developers and easy to integrate into existing projects. In this guide, you'll learn the basic structure of a k6 test and create your first load test script.
+
+## Prerequisites
+
+Before you start:
+
+- **Basic JavaScript knowledge**: Familiarity with JavaScript or TypeScript syntax
+- **k6 installed**: Follow the [installation guide](/get-started/installation) if you haven't already
+- **Code editor**: VS Code, JetBrains, or any text editor
+
+<Tip>
+If you're unfamiliar with JavaScript, check out [k6 Studio](https://grafana.com/docs/k6-studio/) to generate tests without writing code.
+</Tip>
+
+## Basic structure of a k6 test
+
+Every k6 script follows a common structure with these core components:
+
+<Steps>
+  <Step title="Imports">
+    Import k6 modules or JavaScript libraries to extend functionality:
+    ```javascript
+    import http from 'k6/http';
+    import { sleep, check } from 'k6';
+    ```
+  </Step>
+  <Step title="Options (optional)">
+    Configure test execution settings like virtual users and duration:
+    ```javascript
+    export const options = {
+      vus: 10,
+      duration: '30s',
+    };
+    ```
+  </Step>
+  <Step title="Default function">
+    The main test logic that k6 executes repeatedly:
+    ```javascript
+    export default function () {
+      // Your test code here
+    }
+    ```
+  </Step>
+  <Step title="Lifecycle functions (optional)">
+    Code that runs before or after the test:
+    ```javascript
+    export function setup() {
+      // Runs once before the test
+    }
+
+    export function teardown(data) {
+      // Runs once after the test
+    }
+    ```
+  </Step>
+</Steps>
+
+## Create your first test
+
+Let's create a simple test that makes 10 HTTP GET requests with a 1-second delay between requests.
+
+<Steps>
+  <Step title="Create a test file">
+    Create a new file named `my-first-test.js`:
+
+    ```bash
+    touch my-first-test.js
+    ```
+
+    Or use k6's built-in command to generate a template:
+
+    ```bash
+    k6 new my-first-test.js
+    ```
+  </Step>
+
+  <Step title="Import k6 modules">
+    Add imports at the top of your file:
+
+    ```javascript
+    // Import the http module to make HTTP requests
+    import http from 'k6/http';
+
+    // Import the sleep function to introduce delays
+    import { sleep } from 'k6';
+    ```
+  </Step>
+
+  <Step title="Configure test options">
+    Define how many times the test should run:
+
+    ```javascript
+    import http from 'k6/http';
+    import { sleep } from 'k6';
+
+    export const options = {
+      // Execute the default function 10 times
+      iterations: 10,
+    };
+    ```
+  </Step>
+
+  <Step title="Write the default function">
+    Add the main test logic:
+
+    ```javascript
+    import http from 'k6/http';
+    import { sleep } from 'k6';
+
+    export const options = {
+      iterations: 10,
+    };
+
+    // The default function runs repeatedly for the configured iterations
+    export default function () {
+      // Make a GET request to the target URL
+      http.get('https://quickpizza.grafana.com');
+
+      // Sleep for 1 second to simulate real-world usage
+      sleep(1);
+    }
+    ```
+  </Step>
+
+  <Step title="Run your test">
+    Execute the test from your terminal:
+
+    ```bash
+    k6 run my-first-test.js
+    ```
+
+    You'll see output showing the test progress and results.
+  </Step>
+</Steps>
+
+## Add checks and validations
+
+Checks allow you to validate responses and track success rates. They don't stop test execution but provide pass/fail statistics.
+
+```javascript
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+
+export const options = {
+  iterations: 10,
+};
+
+export default function () {
+  const res = http.get('https://quickpizza.grafana.com');
+  
+  // Validate the response
+  check(res, {
+    'status is 200': (r) => r.status === 200,
+    'response time < 500ms': (r) => r.timings.duration < 500,
+    'body contains text': (r) => r.body.includes('pizza'),
+  });
+  
+  sleep(1);
+}
+```
+
+Checks are reported in the test summary and show the percentage of passing validations.
+
+## Run tests with virtual users
+
+Instead of iterations, you can configure tests to run with multiple virtual users (VUs) for a specified duration.
+
+### Using command-line options
+
+```bash
+k6 run --vus 10 --duration 30s my-first-test.js
+```
+
+This runs the test with 10 virtual users for 30 seconds.
+
+### Using script options
+
+```javascript
+import http from 'k6/http';
+import { sleep } from 'k6';
+
+export const options = {
+  vus: 10,           // 10 virtual users
+  duration: '30s',   // Run for 30 seconds
+};
+
+export default function () {
+  http.get('https://quickpizza.grafana.com');
+  sleep(1);
+}
+```
+
+<Info>
+Each virtual user runs the default function in a loop for the specified duration. This simulates concurrent users accessing your application.
+</Info>
+
+## Ramp up traffic with stages
+
+For more realistic traffic patterns, gradually increase and decrease the number of virtual users:
+
+```javascript
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+
+export const options = {
+  stages: [
+    { duration: '30s', target: 20 },   // Ramp up to 20 VUs over 30s
+    { duration: '1m30s', target: 10 }, // Ramp down to 10 VUs
+    { duration: '20s', target: 0 },    // Ramp down to 0 VUs
+  ],
+};
+
+export default function () {
+  const res = http.get('https://quickpizza.grafana.com/');
+  check(res, { 'status is 200': (r) => r.status === 200 });
+  sleep(1);
+}
+```
+
+This creates a more realistic load pattern that gradually increases, maintains, and decreases traffic.
+
+## Understanding the init context
+
+Code outside the default function runs once per VU during initialization. Use this for:
+
+- Loading data from files
+- Defining reusable variables
+- Configuring constants
+
+```javascript
+import http from 'k6/http';
+import { sleep } from 'k6';
+
+// Init context - runs once per VU
+const baseUrl = __ENV.BASE_URL || 'https://quickpizza.grafana.com';
+const headers = { 'Content-Type': 'application/json' };
+
+export const options = {
+  vus: 10,
+  duration: '30s',
+};
+
+// VU context - runs repeatedly
+export default function () {
+  http.get(baseUrl, { headers: headers });
+  sleep(1);
+}
+```
+
+<Warning>
+Avoid expensive operations in the init context that run for every VU. Use `setup()` for operations that should run only once for the entire test.
+</Warning>
+
+## Use environment variables
+
+Make your tests flexible by using environment variables:
+
+```javascript
+import http from 'k6/http';
+import { sleep } from 'k6';
+
+// Read from environment variable with fallback
+const baseUrl = __ENV.BASE_URL || 'https://quickpizza.grafana.com';
+const vus = __ENV.VUS || 10;
+
+export const options = {
+  vus: vus,
+  duration: '30s',
+};
+
+export default function () {
+  http.get(baseUrl);
+  sleep(1);
+}
+```
+
+Run with custom environment variables:
+
+```bash
+k6 run -e BASE_URL=https://api.example.com -e VUS=50 my-first-test.js
+```
+
+## Extending your script
+
+Now that you understand the basics, explore these capabilities:
+
+<CardGroup cols={2}>
+  <Card title="Multiple requests" icon="arrows-split">
+    Add multiple `http.get()` or `http.post()` requests to simulate complex user flows
+  </Card>
+  <Card title="Thresholds" icon="gauge-high">
+    Set performance requirements with [thresholds](https://grafana.com/docs/k6/latest/using-k6/thresholds/) that fail tests if not met
+  </Card>
+  <Card title="Custom metrics" icon="chart-line">
+    Track business-specific metrics using Counter, Gauge, Rate, and Trend
+  </Card>
+  <Card title="Browser tests" icon="browser">
+    Simulate user interactions with the [k6 browser module](https://grafana.com/docs/k6/latest/using-k6-browser/)
+  </Card>
+</CardGroup>
+
+## Example: Complete test script
+
+Here's a more complete example with checks, thresholds, and custom metrics:
+
+```javascript
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+import { Counter } from 'k6/metrics';
+
+// Custom metric
+const pizzaOrders = new Counter('pizza_orders');
+
+// Test configuration
+export const options = {
+  stages: [
+    { duration: '1m', target: 20 },
+    { duration: '3m', target: 20 },
+    { duration: '1m', target: 0 },
+  ],
+  thresholds: {
+    'http_req_duration': ['p(95)<500'], // 95% of requests under 500ms
+    'http_req_failed': ['rate<0.01'],   // Less than 1% error rate
+    'checks': ['rate>0.95'],            // 95% of checks pass
+  },
+};
+
+const baseUrl = __ENV.BASE_URL || 'https://quickpizza.grafana.com';
+
+export default function () {
+  // Homepage
+  let res = http.get(`${baseUrl}/`);
+  check(res, {
+    'homepage loaded': (r) => r.status === 200,
+  });
+  sleep(1);
+  
+  // View menu
+  res = http.get(`${baseUrl}/api/pizza`);
+  check(res, {
+    'menu loaded': (r) => r.status === 200,
+    'has pizza options': (r) => r.json().length > 0,
+  });
+  sleep(2);
+  
+  // Place order (simulated)
+  res = http.post(`${baseUrl}/api/order`, JSON.stringify({
+    pizza: 'margherita',
+    quantity: 1,
+  }), {
+    headers: { 'Content-Type': 'application/json' },
+  });
+  
+  const orderSuccess = check(res, {
+    'order placed': (r) => r.status === 200 || r.status === 201,
+  });
+  
+  if (orderSuccess) {
+    pizzaOrders.add(1);
+  }
+  
+  sleep(1);
+}
+```
+
+## Next steps
+
+You've created your first k6 test! Continue learning:
+
+<CardGroup cols={2}>
+  <Card
+    title="Understanding Results"
+    icon="chart-line"
+    href="/get-started/results"
+  >
+    Learn how to read and analyze k6 test results
+  </Card>
+  <Card
+    title="Using k6 Options"
+    icon="sliders"
+    href="https://grafana.com/docs/k6/latest/using-k6/k6-options/"
+  >
+    Explore all available configuration options
+  </Card>
+  <Card
+    title="HTTP Requests"
+    icon="globe"
+    href="https://grafana.com/docs/k6/latest/using-k6/http-requests/"
+  >
+    Master making HTTP requests with k6
+  </Card>
+  <Card
+    title="Test Examples"
+    icon="file-code"
+    href="https://grafana.com/docs/k6/latest/examples/"
+  >
+    Browse real-world k6 test examples
+  </Card>
+</CardGroup>

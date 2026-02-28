@@ -1,0 +1,205 @@
+---
+title: 'k6/browser'
+description: 'Browser automation API for browser-based load testing with k6'
+icon: 'globe'
+---
+
+The `k6/browser` module provides a browser automation API for running browser-based load tests. It uses the Chrome DevTools Protocol (CDP) to interact with Chromium-based browsers, enabling you to test real user workflows including page loads, interactions, and modern web features.
+
+## Overview
+
+The browser module is inspired by Playwright and other frontend testing frameworks. It manages browser contexts and pages, allowing you to simulate real user behavior in performance tests.
+
+<Note>
+Make sure you are using the latest [k6 version](https://github.com/grafana/k6/releases) to work with the browser module.
+</Note>
+
+## Importing the Module
+
+```javascript
+import { browser, devices } from 'k6/browser';
+```
+
+## Properties
+
+<ParamField path="browser" type="object">
+  Entry point for all browser tests. Manages BrowserContext and Page instances via Chrome DevTools Protocol.
+</ParamField>
+
+<ParamField path="devices" type="object">
+  Predefined emulation settings for many end-user devices. Use to simulate browser behavior on mobile devices.
+</ParamField>
+
+## Browser Module API
+
+The browser module is the entry point for all your tests. It manages:
+- **BrowserContext**: Control browser behavior, set attributes, manage cookies and cache
+- **Page**: Display and interact with your rendered site
+
+### Methods
+
+<ResponseField name="browser.closeContext()" type="function">
+  Closes the current BrowserContext.
+</ResponseField>
+
+<ResponseField name="browser.context()" type="function">
+  Returns the current BrowserContext.
+</ResponseField>
+
+<ResponseField name="browser.isConnected" type="boolean">
+  Indicates whether the CDP connection to the browser process is active.
+</ResponseField>
+
+<ResponseField name="browser.newContext([options])" type="function">
+  Creates and returns a new BrowserContext.
+  
+  **Parameters:**
+  - `options` (optional): Configuration object for the browser context
+</ResponseField>
+
+<ResponseField name="browser.newPage([options])" type="function">
+  Creates a new Page in a new BrowserContext and returns the page.
+  
+  **Parameters:**
+  - `options` (optional): Configuration object for the page
+  
+  <Warning>
+  Pages that have been opened should be closed using `Page.close()`. Pages left open could distort Web Vital metrics.
+  </Warning>
+</ResponseField>
+
+<ResponseField name="browser.version()" type="function">
+  Returns the browser application's version.
+</ResponseField>
+
+## Browser-Level APIs
+
+The following classes provide the browser automation functionality:
+
+| Class | Description |
+|-------|-------------|
+| **BrowserContext** | Enables independent browser sessions with separate pages, cache, and cookies |
+| **ElementHandle** | Represents an in-page DOM element |
+| **Frame** | Access and interact with the Page's frames |
+| **JSHandle** | Represents an in-page JavaScript object |
+| **Keyboard** | Simulate keyboard interactions with the page |
+| **Locator** | Makes it easier to work with dynamically changing elements |
+| **Mouse** | Simulate mouse interactions with the page |
+| **Page** | Provides methods to interact with a single tab in a browser |
+| **Request** | Track requests made by the Page |
+| **Response** | Represents the response received by the Page |
+| **Touchscreen** | Simulate touch interactions with the page |
+| **Worker** | Represents a WebWorker |
+
+## Examples
+
+### Basic Browser Test
+
+<CodeGroup>
+```javascript Basic Example
+import { browser } from 'k6/browser';
+
+export const options = {
+  scenarios: {
+    browser: {
+      executor: 'shared-iterations',
+      options: {
+        browser: {
+          type: 'chromium',
+        },
+      },
+    },
+  },
+  thresholds: {
+    checks: ['rate==1.0'],
+  },
+};
+
+export default async function () {
+  const page = await browser.newPage();
+
+  try {
+    await page.goto('https://test.k6.io/');
+  } finally {
+    await page.close();
+  }
+}
+```
+
+```javascript Mobile Device Emulation
+import { browser, devices } from 'k6/browser';
+
+export const options = {
+  scenarios: {
+    browser: {
+      executor: 'shared-iterations',
+      options: {
+        browser: {
+          type: 'chromium',
+        },
+      },
+    },
+  },
+  thresholds: {
+    checks: ['rate==1.0'],
+  },
+};
+
+export default async function () {
+  const iphoneX = devices['iPhone X'];
+  const context = await browser.newContext(iphoneX);
+  const page = await context.newPage();
+
+  try {
+    await page.goto('https://test.k6.io/');
+  } finally {
+    page.close();
+  }
+}
+```
+</CodeGroup>
+
+### Running Browser Tests
+
+<CodeGroup>
+```bash Linux/macOS
+k6 run script.js
+```
+
+```bash Docker
+# WARNING: The grafana/k6:master-with-browser image launches Chrome 
+# with 'no-sandbox' argument. Only use with trustworthy websites.
+docker run --rm -i grafana/k6:master-with-browser run - <script.js
+```
+
+```powershell Windows
+k6 run script.js
+```
+</CodeGroup>
+
+## Browser Module Options
+
+Customize the browser module's behavior using environment variables:
+
+| Environment Variable | Description |
+|---------------------|-------------|
+| `K6_BROWSER_ARGS` | Additional arguments to pass to the browser |
+| `K6_BROWSER_HEADLESS` | Run browser in headless mode (default: true) |
+| `K6_BROWSER_TIMEOUT` | Default timeout for browser operations |
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="BrowserContext" icon="window" href="/api/browser-context">
+    Manage isolated browser sessions
+  </Card>
+  <Card title="Page" icon="file" href="/api/page">
+    Interact with browser pages
+  </Card>
+  <Card title="Locator" icon="crosshairs" href="/api/locator">
+    Find and interact with elements
+  </Card>
+  <Card title="Browser Options" icon="gear" href="/guides/browser-options">
+    Configure browser behavior
+  </Card>
+</CardGroup>

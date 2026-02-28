@@ -1,0 +1,153 @@
+---
+title: 'Browser Testing Overview'
+description: 'Learn about k6 browser testing capabilities for end-to-end web testing and frontend performance monitoring'
+---
+
+# Browser Testing Overview
+
+The k6 browser module brings browser automation and end-to-end web testing to k6 while supporting core k6 features. It adds browser-level APIs to interact with browsers and collect frontend performance metrics as part of your k6 tests.
+
+<Note>
+To work with the browser module, make sure you are using the latest k6 version, and install a Chromium-based browser on your machine (such as Google Chrome).
+</Note>
+
+## Why Browser Testing?
+
+Browser-level testing provides a way to measure user experience and find issues that are difficult to catch on the protocol level. Browser testing helps you answer questions like:
+
+- When my application receives thousands of simultaneous requests from the protocol-level, what happens to the frontend?
+- How can I get metrics specific to browsers, like total page load time?
+- Are all my elements interactive on the frontend?
+- Are there any loading spinners that take a long time to disappear?
+
+## Key Features
+
+### Real Browser Automation
+
+The browser module uses Chromium to simulate real user interactions:
+
+- Navigate to pages and click elements
+- Fill out forms and submit data
+- Take screenshots and capture metrics
+- Verify page content and UI elements
+
+### Web Vitals Metrics
+
+k6 browser automatically collects Core Web Vitals metrics:
+
+- **FCP (First Contentful Paint)** - Loading performance
+- **LCP (Largest Contentful Paint)** - Main content rendering
+- **CLS (Cumulative Layout Shift)** - Visual stability
+- **FID (First Input Delay)** - Interactivity
+- **INP (Interaction to Next Paint)** - Responsiveness
+- **TTFB (Time to First Byte)** - Server response time
+
+### Hybrid Performance Testing
+
+Combine browser tests with protocol-level tests in a single script to:
+
+- Test real user flows on the frontend while generating higher load in the backend
+- Measure both backend and frontend performance in the same test execution
+- Increase collaboration between backend and frontend teams
+
+## Quick Start
+
+Create a browser test using the k6 CLI:
+
+```bash
+k6 new --template browser browser-script.js
+```
+
+Run the test:
+
+```bash
+k6 run browser-script.js
+```
+
+## Example Browser Test
+
+Here's a simple browser test that navigates to a page and takes a screenshot:
+
+```javascript
+import { browser } from 'k6/browser';
+
+export const options = {
+  scenarios: {
+    ui: {
+      executor: 'shared-iterations',
+      options: {
+        browser: {
+          type: 'chromium',
+        },
+      },
+    },
+  },
+};
+
+export default async function () {
+  const page = await browser.newPage();
+
+  try {
+    await page.goto('https://test.k6.io/');
+    await page.screenshot({ path: 'screenshot.png' });
+  } finally {
+    await page.close();
+  }
+}
+```
+
+## Browser Metrics Output
+
+After running a browser test, k6 displays browser-specific metrics:
+
+```text
+BROWSER
+browser_data_received.........: 357 kB 54 kB/s
+browser_data_sent.............: 4.9 kB 738 B/s
+browser_http_req_duration.....: avg=355.28ms min=124.04ms med=314.4ms
+browser_http_req_failed.......: 0.00%  0 out of 18
+
+WEB_VITALS
+browser_web_vital_cls.........: avg=0        min=0        med=0
+browser_web_vital_fcp.........: avg=2.33s    min=2.33s    med=2.33s
+browser_web_vital_fid.........: avg=300µs    min=300µs    med=300µs
+browser_web_vital_inp.........: avg=56ms     min=56ms     med=56ms
+browser_web_vital_lcp.........: avg=2.33s    min=2.33s    med=2.33s
+browser_web_vital_ttfb........: avg=1.45s    min=1.45s    med=1.45s
+```
+
+## Use Cases
+
+<Steps>
+
+### End-to-End Testing
+
+Validate critical user journeys by simulating real browser interactions from login to checkout.
+
+### Frontend Performance
+
+Monitor Web Vitals and frontend performance under different load conditions.
+
+### Hybrid Load Testing
+
+Combine a small number of browser VUs with many protocol-level VUs for comprehensive testing.
+
+### Regression Testing
+
+Detect frontend regressions by running browser tests in your CI/CD pipeline.
+
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Getting Started" href="/browser/getting-started">
+    Write your first k6 browser test
+  </Card>
+  <Card title="How to Write Tests" href="/browser/how-to-write-tests">
+    Learn browser testing concepts and patterns
+  </Card>
+  <Card title="Best Practices" href="/browser/best-practices">
+    Optimize your browser tests for reliability
+  </Card>
+</CardGroup>

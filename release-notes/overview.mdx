@@ -1,0 +1,210 @@
+---
+title: Release notes
+description: Learn about new features, breaking changes, and bug fixes for each k6 version
+icon: scroll
+---
+
+# Grafana k6 release notes
+
+Stay up to date with the latest k6 releases, including new features, improvements, bug fixes, and breaking changes.
+
+## Where to find release notes
+
+You can find detailed release notes for all k6 versions in the official k6 GitHub repository:
+
+<Card
+  title="k6 Release Notes"
+  icon="github"
+  href="https://github.com/grafana/k6/releases"
+>
+  View all k6 releases on GitHub
+</Card>
+
+## Latest releases
+
+### k6 v0.49.0 (Latest)
+
+Key highlights:
+
+- Browser module improvements
+- New experimental modules
+- Performance optimizations
+- Bug fixes and stability improvements
+
+[View full release notes](https://github.com/grafana/k6/releases/latest)
+
+## Release cadence
+
+k6 follows a regular release schedule:
+
+- **Major releases**: Approximately once per year
+- **Minor releases**: Every 4-6 weeks
+- **Patch releases**: As needed for critical bugs
+
+## What to expect in releases
+
+<Tabs>
+  <Tab title="New features">
+    Major and minor releases may include:
+
+    - New k6 modules and APIs
+    - New executors and scenarios
+    - Protocol support additions
+    - Performance improvements
+    - New output formats
+  </Tab>
+
+  <Tab title="Breaking changes">
+    Major version updates may include:
+
+    - API changes requiring script updates
+    - Deprecated feature removals
+    - Changed default behaviors
+    - Minimum version requirement updates
+
+    <Warning>
+      Always review breaking changes before upgrading in production environments.
+    </Warning>
+  </Tab>
+
+  <Tab title="Bug fixes">
+    All releases include:
+
+    - Bug fixes for reported issues
+    - Stability improvements
+    - Performance optimizations
+    - Documentation updates
+  </Tab>
+
+  <Tab title="Deprecations">
+    Features may be marked as deprecated:
+
+    - Deprecated features remain functional
+    - Removal planned for future major version
+    - Migration path provided
+    - Warnings in documentation and logs
+  </Tab>
+</Tabs>
+
+## Upgrading k6
+
+<Steps>
+  <Step title="Review release notes">
+    Read the release notes for the version you're upgrading to, paying special attention to breaking changes.
+  </Step>
+
+  <Step title="Test in non-production">
+    Test your scripts with the new version in a development or staging environment.
+  </Step>
+
+  <Step title="Update your installation">
+    Use your package manager or download the new version:
+
+    <CodeGroup>
+    ```bash macOS
+    brew upgrade k6
+    ```
+
+    ```bash Linux (apt)
+    sudo apt update
+    sudo apt upgrade k6
+    ```
+
+    ```bash Windows
+    winget upgrade k6
+    ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Verify the upgrade">
+    Check your k6 version:
+
+    ```bash
+    k6 version
+    ```
+  </Step>
+</Steps>
+
+## Recent notable features
+
+Some recent significant additions to k6:
+
+<CardGroup cols={2}>
+  <Card title="Browser module" icon="browser">
+    Browser automation capabilities for end-to-end testing and Web Vitals collection.
+  </Card>
+
+  <Card title="WebSocket support" icon="messages">
+    Native WebSocket testing with browser-compatible API.
+  </Card>
+
+  <Card title="gRPC improvements" icon="network-wired">
+    Enhanced gRPC support with streaming and reflection.
+  </Card>
+
+  <Card title="Execution context" icon="gauge">
+    Access test execution metadata within scripts.
+  </Card>
+</CardGroup>
+
+## Staying informed
+
+Stay up to date with k6 releases:
+
+<AccordionGroup>
+  <Accordion title="GitHub releases">
+    Watch the k6 repository on GitHub and enable notifications for releases:
+
+    [github.com/grafana/k6/releases](https://github.com/grafana/k6/releases)
+  </Accordion>
+
+  <Accordion title="Community forum">
+    Join the k6 community forum for announcements and discussions:
+
+    [community.grafana.com/c/grafana-k6](https://community.grafana.com/c/grafana-k6)
+  </Accordion>
+
+  <Accordion title="Slack community">
+    Join the k6 Slack workspace:
+
+    [k6.io/slack](https://k6.io/slack)
+  </Accordion>
+
+  <Accordion title="Blog">
+    Read the Grafana blog for in-depth articles about new features:
+
+    [grafana.com/blog](https://grafana.com/blog)
+  </Accordion>
+</AccordionGroup>
+
+## Version support
+
+k6 version support policy:
+
+- **Latest version**: Fully supported with updates and bug fixes
+- **Previous version**: Security fixes and critical bugs only
+- **Older versions**: Community support through forums
+
+<Tip>
+  We recommend always using the latest stable version of k6 for the best performance and features.
+</Tip>
+
+## Contributing
+
+k6 is open source and welcomes contributions:
+
+- Report bugs on [GitHub Issues](https://github.com/grafana/k6/issues)
+- Propose features in [GitHub Discussions](https://github.com/grafana/k6/discussions)
+- Submit pull requests with improvements
+- Help with documentation
+
+## Related resources
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/get-started/installation">
+    Installing and upgrading k6
+  </Card>
+  <Card title="GitHub repository" icon="github" href="https://github.com/grafana/k6">
+    k6 source code and issues
+  </Card>
+</CardGroup>

@@ -1,0 +1,406 @@
+---
+title: 'How to Write Browser Tests'
+description: 'Learn essential patterns and techniques for writing effective k6 browser test scripts'
+---
+
+# How to Write Browser Tests
+
+Writing effective browser tests requires understanding asynchronous operations, element selection, and page navigation. This guide covers the essential patterns and techniques you need to know.
+
+## Asynchronous Operations
+
+Most methods in the browser module return JavaScript promises, so k6 scripts must use the `await` keyword to wait for async operations to complete.
+
+### Basic Async Pattern
+
+```javascript
+import { browser } from 'k6/browser';
+
+export default async function () {
+  const page = await browser.newPage();
+  
+  await page.goto('https://quickpizza.grafana.com/');
+  
+  const locator = page.locator('button[name="pizza-please"]');
+  await locator.click();
+  
+  await page.close();
+}
+```
+
+### Why Use Async/Await?
+
+The browser module uses asynchronous APIs for several reasons:
+
+1. JavaScript is single-threaded - async APIs prevent blocking the event loop
+2. Consistency with Playwright and other frontend testing frameworks
+3. Alignment with modern JavaScript development practices
+
+<Warning>
+If you forget `await` on asynchronous APIs, the script may finish before the test completes, resulting in errors like `"Uncaught (in promise) TypeError: Object has no member 'goto'"`.
+</Warning>
+
+## Handling Page Navigation
+
+There are two recommended methods for handling page navigations: using `Promise.all` or using `waitFor`.
+
+### Using Promise.all
+
+When actions trigger page navigation, use `Promise.all` to wait for both the action and navigation:
+
+```javascript
+import { browser } from 'k6/browser';
+import { check } from 'k6';
+
+export const options = {
+  scenarios: {
+    ui: {
+      executor: 'shared-iterations',
+      options: {
+        browser: {
+          type: 'chromium',
+        },
+      },
+    },
+  },
+};
+
+export default async function () {
+  const page = await browser.newPage();
+
+  try {
+    await page.goto('https://test.k6.io/my_messages.php');
+
+    await page.locator('input[name="login"]').type('admin');
+    await page.locator('input[name="password"]').type('123');
+
+    const submitButton = page.locator('input[type="submit"]');
+
+    // Wait for both navigation and button click
+    await Promise.all([page.waitForNavigation(), submitButton.click()]);
+
+    check(page.locator('h2'), {
+      header: async (lo) => (await lo.textContent()) == 'Welcome, admin!',
+    });
+  } finally {
+    await page.close();
+  }
+}
+```
+
+This prevents race conditions by ensuring the page is ready before continuing.
+
+### Wait for Specific Elements
+
+Use `locator.waitFor()` to wait for important elements to appear:
+
+```javascript
+await page.goto('https://my-search-engine.com');
+
+const searchBar = page.locator('.search-bar');
+const submitButton = page.locator('.submit-button');
+
+// Wait for elements to appear
+await searchBar.waitFor();
+await submitButton.waitFor();
+
+// Interact with elements
+await searchBar.fill('k6');
+await submitButton.click();
+
+const searchResults = page.locator('.search-results-table');
+await searchResults.waitFor();
+```
+
+This approach is often clearer than using `Promise.all` and makes scripts easier to follow.
+
+## Interacting with Elements
+
+Use `page.locator()` to find elements and interact with them.
+
+### Finding Elements
+
+```javascript
+import { browser } from 'k6/browser';
+
+export const options = {
+  scenarios: {
+    ui: {
+      executor: 'shared-iterations',
+      options: {
+        browser: {
+          type: 'chromium',
+        },
+      },
+    },
+  },
+};
+
+export default async function () {
+  const page = await browser.newPage();
+
+  try {
+    await page.goto('https://test.k6.io/my_messages.php');
+
+    // Find elements using selectors
+    await page.locator('input[name="login"]').type('admin');
+    await page.locator('input[name="password"]').type('123');
+
+    await page.screenshot({ path: 'screenshot.png' });
+  } finally {
+    await page.close();
+  }
+}
+```
+
+### Common Locator Methods
+
+<CodeGroup>
+
+```javascript Type Text
+const input = page.locator('input[name="username"]');
+await input.type('myusername');
+```
+
+```javascript Click
+const button = page.locator('button[type="submit"]');
+await button.click();
+```
+
+```javascript Get Text
+const heading = page.locator('h1');
+const text = await heading.textContent();
+```
+
+```javascript Check Box
+const checkbox = page.locator('#agree-terms');
+await checkbox.check();
+```
+
+```javascript Fill Input
+const field = page.locator('#email');
+await field.fill('user@example.com');
+```
+
+</CodeGroup>
+
+## Selecting Elements
+
+k6 browser supports CSS and XPath selectors. Choose selectors that are robust to DOM changes.
+
+### Recommended Selectors
+
+<Tip>
+**Best:** User-facing attributes like ARIA labels and data attributes
+```javascript
+page.locator('[aria-label="Login"]')
+page.locator('[data-test="login"]')
+```
+</Tip>
+
+<Tip>
+**Good:** Text selectors using XPath
+```javascript
+page.locator('//button[text()="Submit"]')
+```
+</Tip>
+
+<Warning>
+**Use sparingly:** IDs and class names
+```javascript
+page.locator('#login-btn')      // OK if ID doesn't change
+page.locator('.login-btn')      // Can be duplicated
+```
+</Warning>
+
+<Warning>
+**Avoid:** Generic elements and absolute paths
+```javascript
+page.locator('button')                    // No context
+page.locator('/html[1]/body[1]/main[1]')  // Brittle
+```
+</Warning>
+
+## Hybrid Testing Pattern
+
+Combine browser tests with protocol-level tests using scenarios:
+
+```javascript
+import { browser } from 'k6/browser';
+import { check } from 'k6';
+import http from 'k6/http';
+
+const BASE_URL = __ENV.BASE_URL || 'https://quickpizza.grafana.com';
+
+export const options = {
+  scenarios: {
+    // Protocol-level load test
+    load: {
+      exec: 'getPizza',
+      executor: 'ramping-vus',
+      stages: [
+        { duration: '5s', target: 5 },
+        { duration: '10s', target: 5 },
+        { duration: '5s', target: 0 },
+      ],
+      startTime: '10s',
+    },
+    // Browser-level test
+    browser: {
+      exec: 'checkFrontend',
+      executor: 'constant-vus',
+      vus: 1,
+      duration: '30s',
+      options: {
+        browser: {
+          type: 'chromium',
+        },
+      },
+    },
+  },
+  thresholds: {
+    http_req_failed: ['rate<0.01'],
+    http_req_duration: ['p(95)<500', 'p(99)<1000'],
+    browser_web_vital_fcp: ['p(95) < 1000'],
+    browser_web_vital_lcp: ['p(95) < 2000'],
+  },
+};
+
+export function getPizza() {
+  const restrictions = {
+    maxCaloriesPerSlice: 500,
+    mustBeVegetarian: false,
+    excludedIngredients: ['pepperoni'],
+    excludedTools: ['knife'],
+    maxNumberOfToppings: 6,
+    minNumberOfToppings: 2,
+  };
+
+  const res = http.post(`${BASE_URL}/api/pizza`, JSON.stringify(restrictions), {
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'token abcdef0123456789',
+    },
+  });
+
+  check(res, {
+    'status is 200': (res) => res.status === 200,
+  });
+}
+
+export async function checkFrontend() {
+  const page = await browser.newPage();
+
+  try {
+    await page.goto(BASE_URL);
+
+    check(page.locator('h1'), {
+      header: async (lo) =>
+        (await lo.textContent()) == 'Looking to break out of your pizza routine?',
+    });
+
+    await page.locator('//button[. = "Pizza, Please!"]').click();
+    await page.waitForTimeout(500);
+    
+    await page.screenshot({ path: `screenshots/${__ITER}.png` });
+
+    check(page.locator('div#recommendations'), {
+      recommendation: async (lo) => (await lo.textContent()) != '',
+    });
+  } finally {
+    await page.close();
+  }
+}
+```
+
+### Benefits of Hybrid Testing
+
+- Test real user flows on the frontend while generating higher load in the backend
+- Measure backend and frontend performance in the same test execution
+- Increase collaboration between backend and frontend teams
+
+## Page Object Model
+
+For large test suites, use the page object model pattern to improve maintainability:
+
+```javascript
+// pages/homepage.js
+export class Homepage {
+  constructor(page) {
+    this.page = page;
+    this.nameField = page.locator('[data-testid="ContactName"]');
+    this.emailField = page.locator('[data-testid="ContactEmail"]');
+    this.submitButton = page.locator('#submitContact');
+    this.verificationMessage = page.locator('.row.contact h2');
+  }
+
+  async goto() {
+    await this.page.goto('https://myexamplewebsite/');
+  }
+
+  async submitForm(name, email) {
+    await this.nameField.type(name);
+    await this.emailField.type(email);
+    await this.submitButton.click();
+  }
+
+  async getVerificationMessage() {
+    return await this.verificationMessage.innerText();
+  }
+}
+```
+
+```javascript
+// test.js
+import { browser } from 'k6/browser';
+import { Homepage } from './pages/homepage.js';
+
+export default async function () {
+  const page = await browser.newPage();
+
+  const homepage = new Homepage(page);
+  await homepage.goto();
+  await homepage.submitForm('John Doe', 'john@example.com');
+
+  const message = await homepage.getVerificationMessage();
+  console.log(message);
+
+  await page.close();
+}
+```
+
+## Setting Thresholds
+
+Set thresholds for browser metrics to define performance SLOs:
+
+```javascript
+export const options = {
+  scenarios: {
+    ui: {
+      executor: 'shared-iterations',
+      options: {
+        browser: {
+          type: 'chromium',
+        },
+      },
+    },
+  },
+  thresholds: {
+    'browser_web_vital_lcp': ['p(90) < 1000'],
+    'browser_web_vital_fcp': ['p(95) < 800'],
+    'browser_web_vital_inp': ['p(90) < 100'],
+    checks: ['rate==1.0'],
+  },
+};
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Best Practices" href="/browser/best-practices">
+    Learn optimization techniques and patterns
+  </Card>
+  <Card title="Overview" href="/browser/overview">
+    Review browser testing fundamentals
+  </Card>
+</CardGroup>

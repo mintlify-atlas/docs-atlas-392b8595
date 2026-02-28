@@ -1,0 +1,306 @@
+---
+title: 'k6/ws'
+description: 'WebSocket client with local event loop for testing WebSocket connections'
+icon: 'code-compare'
+---
+
+The `k6/ws` module provides a WebSocket client implementing the [WebSocket protocol](http://www.rfc-editor.org/rfc/rfc6455.txt). This module uses a **local event loop** that blocks VU execution until the connection is closed.
+
+<Note>
+For better performance with multiple concurrent connections, consider using `k6/websockets` which uses a global event loop.
+</Note>
+
+## Overview
+
+The `k6/ws` module creates WebSocket connections that block test execution until closed. This is suitable for testing scenarios where each VU maintains a single long-lived WebSocket connection.
+
+## Importing the Module
+
+```javascript
+import ws from 'k6/ws';
+```
+
+## API Reference
+
+### Functions
+
+<ResponseField name="connect(url, params, callback)" type="function">
+  Creates a WebSocket connection and provides a Socket client to interact with the service. The method blocks test finalization until the connection is closed.
+  
+  **Parameters:**
+  <ParamField path="url" type="string" required>
+    WebSocket URL (e.g., `wss://echo.websocket.org`)
+  </ParamField>
+  
+  <ParamField path="params" type="Params">
+    Connection parameters (headers, cookies, compression, tags)
+  </ParamField>
+  
+  <ParamField path="callback" type="function" required>
+    Function called when the WebSocket connection is initiated. Receives a Socket object.
+  </ParamField>
+  
+  **Returns:**
+  <ResponseField name="response" type="Response">
+    HTTP Response object from the WebSocket handshake
+  </ResponseField>
+</ResponseField>
+
+### Socket Class
+
+The Socket object is passed to the callback function and provides methods to interact with the WebSocket connection.
+
+#### Methods
+
+<ResponseField name="Socket.close()" type="function">
+  Closes the WebSocket connection.
+</ResponseField>
+
+<ResponseField name="Socket.on(event, callback)" type="function">
+  Sets up an event listener on the connection.
+  
+  **Events:**
+  - `open` - Connection established
+  - `message` - Text message received
+  - `binaryMessage` - Binary message received
+  - `ping` - Ping received
+  - `pong` - Pong received
+  - `close` - Connection closed
+  - `error` - Error occurred
+  
+  **Parameters:**
+  <ParamField path="event" type="string" required>
+    Event name to listen for
+  </ParamField>
+  
+  <ParamField path="callback" type="function" required>
+    Handler function for the event
+  </ParamField>
+</ResponseField>
+
+<ResponseField name="Socket.ping()" type="function">
+  Sends a ping frame to the server.
+</ResponseField>
+
+<ResponseField name="Socket.send(data)" type="function">
+  Sends string data through the WebSocket.
+  
+  **Parameters:**
+  <ParamField path="data" type="string" required>
+    String data to send
+  </ParamField>
+</ResponseField>
+
+<ResponseField name="Socket.sendBinary(data)" type="function">
+  Sends binary data through the WebSocket.
+  
+  **Parameters:**
+  <ParamField path="data" type="ArrayBuffer" required>
+    Binary data to send
+  </ParamField>
+</ResponseField>
+
+<ResponseField name="Socket.setInterval(callback, interval)" type="function">
+  Calls a function repeatedly at specified intervals while the connection is open.
+  
+  **Parameters:**
+  <ParamField path="callback" type="function" required>
+    Function to call repeatedly
+  </ParamField>
+  
+  <ParamField path="interval" type="number" required>
+    Interval in milliseconds
+  </ParamField>
+</ResponseField>
+
+<ResponseField name="Socket.setTimeout(callback, delay)" type="function">
+  Calls a function after a delay if the connection is still open.
+  
+  **Parameters:**
+  <ParamField path="callback" type="function" required>
+    Function to call after delay
+  </ParamField>
+  
+  <ParamField path="delay" type="number" required>
+    Delay in milliseconds
+  </ParamField>
+</ResponseField>
+
+## Connection Parameters
+
+### Params Object
+
+<ParamField path="compression" type="string">
+  Compression algorithm to use. Currently only `"deflate"` is supported.
+</ParamField>
+
+<ParamField path="jar" type="http.CookieJar">
+  Cookie jar for the WebSocket connection. Uses the default VU cookie jar if not specified.
+</ParamField>
+
+<ParamField path="headers" type="object">
+  Custom HTTP headers to include in the WebSocket handshake request.
+</ParamField>
+
+<ParamField path="tags" type="object">
+  Custom metric tags for filtering results and setting thresholds.
+</ParamField>
+
+## Connection Lifecycle
+
+Calling `connect()` will block the VU until the WebSocket connection is closed by one of:
+
+1. Remote host close event
+2. `Socket.close()` call
+3. k6 VU interruption (test end, CLI command)
+
+## Examples
+
+### Basic WebSocket Connection
+
+<CodeGroup>
+```javascript Simple Connection
+import ws from 'k6/ws';
+
+export default function () {
+  const url = 'wss://echo.websocket.org';
+  const resp = ws.connect(url, null, function (socket) {
+    socket.on('open', function () {
+      console.log('WebSocket connection established!');
+      socket.close();
+    });
+  });
+}
+```
+
+```javascript Echo Server Test
+import ws from 'k6/ws';
+import { check } from 'k6';
+
+export default function () {
+  const url = 'wss://echo.websocket.org';
+  const params = { tags: { my_tag: 'hello' } };
+
+  const res = ws.connect(url, params, function (socket) {
+    socket.on('open', () => {
+      console.log('connected');
+      socket.send('test message');
+    });
+
+    socket.on('message', (data) => {
+      console.log('Message received: ', data);
+      socket.close();
+    });
+
+    socket.on('close', () => console.log('disconnected'));
+    socket.on('error', (e) => console.log('error: ', e));
+  });
+
+  check(res, { 'status is 101': (r) => r && r.status === 101 });
+}
+```
+
+```javascript With Timers
+import ws from 'k6/ws';
+import { check } from 'k6';
+
+export default function () {
+  const url = 'wss://echo.websocket.org';
+
+  const res = ws.connect(url, null, function (socket) {
+    socket.on('open', function open() {
+      console.log('connected');
+
+      socket.setInterval(function timeout() {
+        socket.ping();
+        console.log('Pinging every 1sec');
+      }, 1000);
+    });
+
+    socket.on('ping', () => console.log('PING!'));
+    socket.on('pong', () => console.log('PONG!'));
+
+    socket.setTimeout(function () {
+      console.log('2 seconds passed, closing the socket');
+      socket.close();
+    }, 2000);
+  });
+
+  check(res, { 'status is 101': (r) => r && r.status === 101 });
+}
+```
+</CodeGroup>
+
+### Custom Headers and Parameters
+
+```javascript
+import ws from 'k6/ws';
+import { check } from 'k6';
+
+export default function () {
+  const url = 'wss://echo.websocket.org';
+  
+  const params = {
+    headers: {
+      'X-My-Header': 'k6-test',
+    },
+    tags: {
+      test_type: 'websocket',
+    },
+  };
+
+  const res = ws.connect(url, params, function (socket) {
+    socket.on('open', function open() {
+      console.log('Connected with custom headers');
+      socket.send('Hello with custom headers!');
+    });
+
+    socket.on('message', function (message) {
+      console.log(`Received: ${message}`);
+      socket.close();
+    });
+  });
+
+  check(res, { 'status is 101': (r) => r && r.status === 101 });
+}
+```
+
+## WebSocket Metrics
+
+k6 automatically collects WebSocket-specific metrics:
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `ws_connecting` | Trend | Time to establish connection |
+| `ws_session_duration` | Trend | Total session duration |
+| `ws_sessions` | Counter | Total number of sessions |
+| `ws_msgs_sent` | Counter | Messages sent |
+| `ws_msgs_received` | Counter | Messages received |
+| `ws_ping` | Trend | Ping round-trip time |
+
+## Comparison with k6/websockets
+
+| Feature | k6/ws | k6/websockets |
+|---------|-------|---------------|
+| Event Loop | Local (blocks VU) | Global (non-blocking) |
+| Concurrent Connections | One per VU | Multiple per VU |
+| API Style | Callback-based | Browser WebSocket API |
+| Performance | Good for single connections | Better for multiple connections |
+| Use Case | Traditional WebSocket testing | Modern async WebSocket testing |
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="k6/websockets" icon="plug" href="/api/k6-websockets">
+    Modern WebSocket API with global event loop
+  </Card>
+  <Card title="Params" icon="sliders" href="/api/ws-params">
+    WebSocket connection parameters
+  </Card>
+  <Card title="WebSocket Testing Guide" icon="book" href="/guides/websocket-testing">
+    Learn WebSocket testing patterns
+  </Card>
+  <Card title="Metrics Reference" icon="chart-line" href="/guides/metrics">
+    WebSocket metrics documentation
+  </Card>
+</CardGroup>

@@ -1,0 +1,683 @@
+---
+title: Automated Performance Testing
+description: Establish a continuous performance testing strategy by automating k6 tests across your development lifecycle and CI/CD pipelines
+---
+
+Automated performance testing establishes a repeatable and consistent process for checking reliability across different stages of your development and release cycle. This guide helps you plan and implement a comprehensive automation strategy.
+
+## Why Automate Performance Tests
+
+Automation transforms performance testing from reactive to proactive:
+
+<CardGroup cols={2}>
+  <Card title="Continuous Confidence" icon="shield-check">
+    Expand test coverage, improve maintenance, and increase confidence in testing outcomes through consistent execution
+  </Card>
+  <Card title="Early Detection" icon="magnifying-glass">
+    Catch performance issues earlier in the SDLC when they're cheaper and easier to fix
+  </Card>
+  <Card title="Cross-Team Collaboration" icon="users">
+    Foster shared practices and accountability for reliability across engineering teams
+  </Card>
+  <Card title="Efficient Process" icon="gauge">
+    Create a more efficient and effective testing process through standardization
+  </Card>
+</CardGroup>
+
+<Note>
+Automation doesn't eliminate manual testing. It complements it by establishing routines for consistent performance validation.
+</Note>
+
+## Beyond CI/CD
+
+While CI/CD integration is important, it's not the only way to automate tests:
+
+<Tabs>
+  <Tab title="CI/CD Pipelines">
+    Run tests on code changes with pass/fail criteria:
+    ```yaml .github/workflows/performance.yml
+    name: Performance Tests
+    on: [pull_request]
+    jobs:
+      smoke-test:
+        runs-on: ubuntu-latest
+        steps:
+          - uses: actions/checkout@v3
+          - name: Run k6 smoke test
+            uses: grafana/k6-action@v0.3.1
+            with:
+              filename: tests/smoke.js
+    ```
+  </Tab>
+  
+  <Tab title="Scheduled Tests">
+    Use cron jobs for regular testing:
+    ```yaml .github/workflows/scheduled-tests.yml
+    name: Scheduled Load Tests
+    on:
+      schedule:
+        - cron: '0 2 * * *'  # Daily at 2 AM
+    jobs:
+      load-test:
+        runs-on: ubuntu-latest
+        steps:
+          - uses: actions/checkout@v3
+          - name: Run k6 load test
+            uses: grafana/k6-action@v0.3.1
+            with:
+              filename: tests/load.js
+    ```
+  </Tab>
+  
+  <Tab title="Cloud Scheduling">
+    Use Grafana Cloud k6 for managed scheduling:
+    ```javascript
+    // Schedule via k6 Cloud
+    k6 cloud tests/load.js --schedule "0 */6 * * *"
+    ```
+  </Tab>
+  
+  <Tab title="Manual Triggers">
+    Include in release checklists:
+    - Pre-release validation
+    - Production deployment verification
+    - Post-deployment smoke tests
+  </Tab>
+</Tabs>
+
+## Planning Your Automation Strategy
+
+### Step 1: Define Test Purposes
+
+Determine what each test should accomplish:
+
+<Steps>
+  <Step title="Performance baselines">
+    Compare current performance against established baselines
+  </Step>
+  <Step title="Trend analysis">
+    Observe performance metrics over time to detect gradual degradation
+  </Step>
+  <Step title="Regression detection">
+    Catch performance regressions in new releases
+  </Step>
+  <Step title="SLO validation">
+    Verify Service Level Objectives on a regular basis
+  </Step>
+  <Step title="Quality gates">
+    Set pass/fail criteria in CI/CD pipelines
+  </Step>
+</Steps>
+
+### Step 2: Choose Tests to Automate
+
+Start simple and iterate:
+
+```javascript
+// Example: Modular test design
+// scenarios/checkout.js
+export function checkoutFlow() {
+  // Reusable checkout scenario
+}
+
+// tests/smoke-checkout.js
+import { checkoutFlow } from '../scenarios/checkout.js';
+export const options = {
+  vus: 3,
+  duration: '1m',
+};
+export default checkoutFlow;
+
+// tests/load-checkout.js
+import { checkoutFlow } from '../scenarios/checkout.js';
+export const options = {
+  stages: [
+    { duration: '5m', target: 50 },
+    { duration: '10m', target: 50 },
+  ],
+};
+export default checkoutFlow;
+```
+
+<Tip>
+Modularize scenarios and workloads separately. This lets you reuse logic across different test types (smoke, load, stress).
+</Tip>
+
+### Step 3: Model Scenarios and Workload
+
+Create different test types for each scenario:
+
+| Scenario | Smoke | Load | Stress | Spike | Soak |
+|----------|-------|------|--------|-------|------|
+| **GET /api/products** | 1 iteration | 100 req/s, 3m | 1500 req/s, 5m | - | - |
+| **Checkout flow** | 3 iterations | 50 VUs, 5m | - | 200 VUs, 1m | - |
+| **User registration** | 1 iteration | 20 VUs, 5m | 50 VUs, 10m | - | 100 VUs, 8h |
+
+<Note>
+Always create smoke tests for script validation and load tests for baseline comparisons.
+</Note>
+
+## Environment-Based Automation
+
+### Development Environment
+
+**Purpose:** Validate test scripts and basic functionality
+
+```javascript
+// smoke-local.js
+import http from 'k6/http';
+import { check } from 'k6';
+
+export const options = {
+  vus: 1,
+  iterations: 1,
+};
+
+export default function () {
+  const res = http.get(__ENV.BASE_URL || 'http://localhost:3000');
+  check(res, {
+    'status is 200': (r) => r.status === 200,
+    'response time < 500ms': (r) => r.timings.duration < 500,
+  });
+}
+```
+
+**When to run:** Before committing code, during development
+
+### QA Environment
+
+**Purpose:** Functional validation with smoke tests
+
+```yaml .github/workflows/qa-tests.yml
+name: QA Smoke Tests
+on:
+  push:
+    branches: [develop]
+jobs:
+  smoke-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Run all smoke tests
+        run: |
+          k6 run tests/smoke-api.js
+          k6 run tests/smoke-checkout.js
+          k6 run tests/smoke-auth.js
+```
+
+**When to run:** On every push to develop branch
+
+### Pre-Release Environment
+
+**Purpose:** Comprehensive testing with quality gates
+
+```javascript
+// load-test-with-thresholds.js
+export const options = {
+  stages: [
+    { duration: '5m', target: 100 },
+    { duration: '10m', target: 100 },
+    { duration: '5m', target: 0 },
+  ],
+  thresholds: {
+    http_req_failed: ['rate<0.01'],
+    http_req_duration: ['p(90)<600'],
+    'http_req_duration{type:api}': ['p(95)<800'],
+  },
+};
+```
+
+**Strategy:**
+- Run all test types (load, stress, spike)
+- Execute each test at least twice
+- Schedule tests every 4-8 hours during pre-release period
+- Validate before release approval
+
+### Staging Environment
+
+**Purpose:** Track performance trends
+
+```yaml .github/workflows/staging-baseline.yml
+name: Staging Baseline Tests
+on:
+  schedule:
+    - cron: '0 0 * * 2,5'  # Tuesday and Friday
+jobs:
+  baseline-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run baseline tests
+        run: |
+          k6 run --out experimental-prometheus-rw tests/load-api.js
+          k6 run --out experimental-prometheus-rw tests/load-checkout.js
+```
+
+**When to run:** 2-3 times per week
+
+### Production Environment
+
+**Purpose:** Continuous monitoring and validation
+
+<Tabs>
+  <Tab title="Synthetic Monitoring">
+    ```javascript
+    // synthetic-monitor.js
+    import http from 'k6/http';
+    import { check } from 'k6';
+    
+    export const options = {
+      vus: 1,
+      duration: '30s',
+      thresholds: {
+        http_req_failed: ['rate<0.01'],
+        http_req_duration: ['p(95)<1000'],
+      },
+    };
+    
+    export default function () {
+      const res = http.get('https://api.example.com/health');
+      check(res, {
+        'API available': (r) => r.status === 200,
+        'response time OK': (r) => r.timings.duration < 500,
+      });
+    }
+    ```
+    
+    Schedule to run every 5 minutes with alerting.
+  </Tab>
+  
+  <Tab title="Low-Load Testing">
+    ```javascript
+    // production-baseline.js
+    export const options = {
+      stages: [
+        { duration: '2m', target: 25 },  // 50% of average load
+        { duration: '5m', target: 25 },
+        { duration: '2m', target: 0 },
+      ],
+    };
+    ```
+    
+    Run weekly during off-peak hours.
+  </Tab>
+  
+  <Tab title="Canary Testing">
+    ```javascript
+    // canary-validation.js
+    export const options = {
+      scenarios: {
+        production_canary: {
+          executor: 'constant-vus',
+          vus: 50,
+          duration: '10m',
+          env: { TARGET: 'https://canary.example.com' },
+        },
+      },
+      thresholds: {
+        http_req_failed: ['rate<0.01'],
+        http_req_duration: ['p(95)<600'],
+      },
+    };
+    ```
+    
+    Run during canary deployments.
+  </Tab>
+</Tabs>
+
+## Complete Automation Plan Example
+
+| Test | Environment | Type | Workload | Automation | Frequency |
+|------|-------------|------|----------|------------|-----------|
+| API smoke | QA | Smoke | 1 iteration | CI pipeline | Every commit |
+| API load | Pre-release | Load | 100 req/s, 3m | Scheduled | 3x/day during pre-release |
+| API stress | Pre-release | Stress | 1500 req/s, 5m | Scheduled | 3x/day during pre-release |
+| API baseline | Staging | Load | 100 req/s, 3m | Scheduled | 2x/week |
+| Checkout smoke | QA | Smoke | 3 iterations | CI pipeline | Every commit |
+| Checkout load | Pre-release | Load | 50 VUs, 5m | Scheduled | 3x/day during pre-release |
+| Checkout spike | Pre-release | Spike | 200 VUs, 1m | Scheduled | 3x/day during pre-release |
+| Production health | Production | Synthetic | 1 VU, continuous | Scheduled | Every 5 min |
+| Production baseline | Production | Load (50%) | 50 req/s, 3m | Scheduled | Weekly |
+
+## Result Analysis Strategy
+
+### Store Results
+
+<Tabs>
+  <Tab title="Prometheus">
+    ```javascript
+    // k6 run --out experimental-prometheus-rw test.js
+    export const options = {
+      // Test configuration
+    };
+    ```
+    
+    Configure Prometheus endpoint:
+    ```bash
+    export K6_PROMETHEUS_RW_SERVER_URL=http://prometheus:9090/api/v1/write
+    ```
+  </Tab>
+  
+  <Tab title="Grafana Cloud k6">
+    ```bash
+    # Set cloud token
+    export K6_CLOUD_TOKEN=your-token
+    
+    # Run test with cloud output
+    k6 run --out cloud test.js
+    ```
+  </Tab>
+  
+  <Tab title="InfluxDB">
+    ```bash
+    k6 run --out influxdb=http://localhost:8086/k6 test.js
+    ```
+  </Tab>
+  
+  <Tab title="JSON">
+    ```bash
+    k6 run --out json=results.json test.js
+    ```
+  </Tab>
+</Tabs>
+
+### Define Key Metrics
+
+```javascript
+import { Trend, Rate, Counter } from 'k6/metrics';
+
+const apiLatency = new Trend('api_latency', true);
+const errorRate = new Rate('error_rate');
+const apiCalls = new Counter('api_calls');
+
+export const options = {
+  thresholds: {
+    'api_latency': ['p(95)<500', 'p(99)<1000'],
+    'error_rate': ['rate<0.01'],
+    'http_req_duration{endpoint:critical}': ['p(90)<300'],
+  },
+};
+
+export default function () {
+  const start = Date.now();
+  const res = http.get('https://api.example.com');
+  apiLatency.add(Date.now() - start);
+  errorRate.add(res.status !== 200);
+  apiCalls.add(1);
+}
+```
+
+### Set Up Alerts
+
+```yaml prometheus-alerts.yml
+groups:
+  - name: k6_performance
+    interval: 30s
+    rules:
+      - alert: HighErrorRate
+        expr: rate(k6_http_req_failed[5m]) > 0.01
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value }} (threshold: 0.01)"
+      
+      - alert: SlowResponseTime
+        expr: histogram_quantile(0.95, k6_http_req_duration_bucket) > 1000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow response times"
+          description: "P95 latency is {{ $value }}ms"
+```
+
+## CI/CD Integration Examples
+
+<Tabs>
+  <Tab title="GitHub Actions">
+    ```yaml .github/workflows/performance.yml
+    name: Performance Tests
+    on:
+      pull_request:
+      push:
+        branches: [main]
+    
+    jobs:
+      smoke-test:
+        runs-on: ubuntu-latest
+        steps:
+          - uses: actions/checkout@v3
+          
+          - name: Run k6 smoke test
+            uses: grafana/k6-action@v0.3.1
+            with:
+              filename: tests/smoke.js
+              flags: --out json=results.json
+          
+          - name: Upload results
+            uses: actions/upload-artifact@v3
+            if: always()
+            with:
+              name: k6-results
+              path: results.json
+      
+      load-test:
+        runs-on: ubuntu-latest
+        if: github.event_name == 'push'
+        steps:
+          - uses: actions/checkout@v3
+          
+          - name: Run k6 load test
+            uses: grafana/k6-action@v0.3.1
+            env:
+              K6_CLOUD_TOKEN: ${{ secrets.K6_CLOUD_TOKEN }}
+            with:
+              filename: tests/load.js
+              flags: --out cloud
+    ```
+  </Tab>
+  
+  <Tab title="GitLab CI">
+    ```yaml .gitlab-ci.yml
+    stages:
+      - test
+      - performance
+    
+    smoke_test:
+      stage: test
+      image: grafana/k6:latest
+      script:
+        - k6 run tests/smoke.js
+      artifacts:
+        reports:
+          junit: results.xml
+    
+    load_test:
+      stage: performance
+      image: grafana/k6:latest
+      only:
+        - main
+      script:
+        - k6 run --out cloud tests/load.js
+      variables:
+        K6_CLOUD_TOKEN: $K6_CLOUD_TOKEN
+    ```
+  </Tab>
+  
+  <Tab title="Jenkins">
+    ```groovy Jenkinsfile
+    pipeline {
+      agent any
+      
+      stages {
+        stage('Smoke Test') {
+          steps {
+            sh 'k6 run tests/smoke.js'
+          }
+        }
+        
+        stage('Load Test') {
+          when {
+            branch 'main'
+          }
+          steps {
+            withCredentials([string(credentialsId: 'k6-cloud-token', variable: 'K6_CLOUD_TOKEN')]) {
+              sh 'k6 run --out cloud tests/load.js'
+            }
+          }
+        }
+      }
+      
+      post {
+        always {
+          archiveArtifacts artifacts: '*.json', allowEmptyArchive: true
+        }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Start Simple" icon="seedling">
+    Begin with a few tests across different environments. Expand coverage gradually as you learn.
+  </Card>
+  <Card title="Maintain Consistency" icon="arrows-rotate">
+    Always run identical tests. Don't change workload or scenario between runs you want to compare.
+  </Card>
+  <Card title="Run Tests Twice" icon="clone">
+    Schedule each test to run twice consecutively for better comparison and to identify unreliable tests.
+  </Card>
+  <Card title="Control Risky Tests" icon="triangle-exclamation">
+    Don't fully automate heavy-load tests that might cause outages. Keep them manual with supervision.
+  </Card>
+  <Card title="Use Thresholds Wisely" icon="sliders">
+    Start with warning thresholds, not blocking ones. Mature your criteria before blocking releases.
+  </Card>
+  <Card title="Correlate Data" icon="link">
+    Connect test results with observability data to find root causes faster.
+  </Card>
+</CardGroup>
+
+## Stopping Tests Automatically
+
+Stop tests when critical conditions are met:
+
+```javascript
+export const options = {
+  thresholds: {
+    // Abort if error rate exceeds 5%
+    http_req_failed: [
+      { threshold: 'rate<0.05', abortOnFail: true },
+    ],
+    // Abort if p95 latency exceeds 3 seconds
+    http_req_duration: [
+      { threshold: 'p(95)<3000', abortOnFail: true },
+    ],
+  },
+};
+```
+
+<Warning>
+Use `abortOnFail` carefully. It stops the test immediately when the threshold is crossed, which may prevent gathering complete data.
+</Warning>
+
+## Complete Automation Example
+
+Here's a full automation setup:
+
+```javascript tests/api-load-test.js
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+import { Rate, Trend } from 'k6/metrics';
+
+const errorRate = new Rate('errors');
+const apiDuration = new Trend('api_duration');
+
+export const options = {
+  stages: [
+    { duration: '2m', target: 50 },
+    { duration: '5m', target: 50 },
+    { duration: '2m', target: 0 },
+  ],
+  thresholds: {
+    http_req_failed: ['rate<0.01'],
+    http_req_duration: ['p(95)<500'],
+    errors: ['rate<0.02'],
+    api_duration: ['p(99)<800'],
+  },
+  tags: {
+    test_type: 'load',
+    environment: __ENV.ENVIRONMENT || 'staging',
+  },
+};
+
+const BASE_URL = __ENV.BASE_URL || 'https://api.staging.example.com';
+
+export default function () {
+  const start = Date.now();
+  
+  const res = http.get(`${BASE_URL}/api/products`, {
+    tags: { endpoint: 'products' },
+  });
+  
+  const success = check(res, {
+    'status is 200': (r) => r.status === 200,
+    'has products': (r) => r.json('products').length > 0,
+  });
+  
+  errorRate.add(!success);
+  apiDuration.add(Date.now() - start);
+  
+  sleep(1);
+}
+```
+
+```yaml .github/workflows/automated-testing.yml
+name: Automated Performance Testing
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 */8 * * *'  # Every 8 hours
+  workflow_dispatch:
+
+jobs:
+  performance-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        test: [smoke, load, stress]
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Run ${{ matrix.test }} test
+        uses: grafana/k6-action@v0.3.1
+        env:
+          K6_CLOUD_TOKEN: ${{ secrets.K6_CLOUD_TOKEN }}
+          BASE_URL: https://api.staging.example.com
+          ENVIRONMENT: staging
+        with:
+          filename: tests/${{ matrix.test }}-test.js
+          flags: --out cloud
+      
+      - name: Notify on failure
+        if: failure()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Performance test failed: ${{ matrix.test }}`,
+              body: `The ${{ matrix.test }} test failed. Check the workflow run for details.`,
+              labels: ['performance', 'automated-test']
+            })
+```
+
+This comprehensive setup provides continuous performance validation across your entire development lifecycle.

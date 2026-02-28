@@ -1,0 +1,523 @@
+---
+title: Understanding k6 Results
+description: Learn how to read, analyze, and export k6 test results including metrics, summaries, and time-series data.
+---
+
+# Understanding k6 results
+
+As k6 runs your test, it collects performance metrics about both the test execution and system behavior. Understanding these results helps you identify performance issues and validate that your application meets reliability goals.
+
+## End-of-test summary
+
+After your test completes, k6 prints a summary to the terminal with aggregated statistics for all metrics.
+
+### Running a test
+
+Run any k6 test to see the results:
+
+```bash
+k6 run script.js
+```
+
+You'll see:
+
+1. **Test progress**: Real-time updates as the test runs
+2. **Summary statistics**: Aggregated metrics after completion
+3. **Check results**: Pass/fail rates for validations
+4. **Threshold results**: Whether performance goals were met
+
+### Example output
+
+```text
+     ✓ status is 200
+     ✓ response time < 500ms
+
+     checks.........................: 100.00% ✓ 200       ✗ 0
+     data_received..................: 2.4 MB  80 kB/s
+     data_sent......................: 18 kB   600 B/s
+     http_req_blocked...............: avg=1.5ms    min=1µs     med=3µs     max=150ms   p(90)=5µs     p(95)=7µs
+     http_req_connecting............: avg=750µs    min=0s      med=0s      max=75ms    p(90)=0s      p(95)=0s
+     http_req_duration..............: avg=185.5ms  min=150ms   med=180ms   max=250ms   p(90)=210ms   p(95)=230ms
+       { expected_response:true }...: avg=185.5ms  min=150ms   med=180ms   max=250ms   p(90)=210ms   p(95)=230ms
+     http_req_failed................: 0.00%   ✓ 0         ✗ 100
+     http_req_receiving.............: avg=1.2ms    min=50µs    med=1ms     max=5ms     p(90)=2ms     p(95)=3ms
+     http_req_sending...............: avg=50µs     min=10µs    med=40µs    max=200µs   p(90)=80µs    p(95)=100µs
+     http_req_tls_handshaking.......: avg=0s       min=0s      med=0s      max=0s      p(90)=0s      p(95)=0s
+     http_req_waiting...............: avg=184ms    min=149ms   med=179ms   max=248ms   p(90)=209ms   p(95)=228ms
+     http_reqs......................: 100     3.333333/s
+     iteration_duration.............: avg=1.19s    min=1.15s   med=1.18s   max=1.25s   p(90)=1.21s   p(95)=1.23s
+     iterations.....................: 100     3.333333/s
+     vus............................: 10      min=10      max=10
+     vus_max........................: 10      min=10      max=10
+```
+
+<Info>
+The ✓ symbol indicates passing checks or thresholds, while ✗ indicates failures.
+</Info>
+
+## Built-in metrics
+
+k6 automatically collects these metrics for every test:
+
+### HTTP metrics
+
+<Tabs>
+  <Tab title="Request Timing">
+    **`http_req_duration`**
+    - **Description**: Total time for the request (sending + waiting + receiving)
+    - **Type**: Trend
+    - **Key metric**: This is your primary latency metric
+    - **What to look for**: p(95) and p(99) values under your target (e.g., < 500ms)
+
+    **`http_req_waiting`**
+    - **Description**: Time spent waiting for response (server processing time)
+    - **Type**: Trend
+    - **What to look for**: High values indicate slow server processing
+
+    **`http_req_sending`**
+    - **Description**: Time spent sending request data
+    - **Type**: Trend
+    - **What to look for**: High values may indicate network issues
+
+    **`http_req_receiving`**
+    - **Description**: Time spent receiving response data
+    - **Type**: Trend
+    - **What to look for**: High values for large responses are normal
+  </Tab>
+
+  <Tab title="Connection">
+    **`http_req_connecting`**
+    - **Description**: Time spent establishing TCP connection
+    - **Type**: Trend
+    - **What to look for**: Should be 0s for keep-alive connections
+
+    **`http_req_tls_handshaking`**
+    - **Description**: Time spent on TLS handshake
+    - **Type**: Trend
+    - **What to look for**: Should be 0s after initial connection
+
+    **`http_req_blocked`**
+    - **Description**: Time spent waiting for a free TCP connection
+    - **Type**: Trend
+    - **What to look for**: High values indicate connection pool exhaustion
+  </Tab>
+
+  <Tab title="Success & Volume">
+    **`http_req_failed`**
+    - **Description**: Rate of failed requests
+    - **Type**: Rate
+    - **What to look for**: Should be < 1% (0.01)
+
+    **`http_reqs`**
+    - **Description**: Total HTTP requests per second
+    - **Type**: Counter
+    - **What to look for**: Throughput metric
+
+    **`data_received`**
+    - **Description**: Amount of data received
+    - **Type**: Counter
+    - **What to look for**: Bandwidth consumption
+
+    **`data_sent`**
+    - **Description**: Amount of data sent
+    - **Type**: Counter
+    - **What to look for**: Upload bandwidth usage
+  </Tab>
+</Tabs>
+
+### Test execution metrics
+
+**`iterations`**
+- **Description**: Number of times the default function completed
+- **Type**: Counter
+- **What to look for**: Total test iterations and rate (iterations/s)
+
+**`iteration_duration`**
+- **Description**: Time to complete one iteration
+- **Type**: Trend
+- **What to look for**: Should include all requests + sleep time
+
+**`vus`**
+- **Description**: Number of active virtual users
+- **Type**: Gauge
+- **What to look for**: Current load level
+
+**`vus_max`**
+- **Description**: Maximum possible number of virtual users
+- **Type**: Gauge
+- **What to look for**: Allocated VU capacity
+
+## Understanding metric statistics
+
+For Trend metrics (like `http_req_duration`), k6 reports several statistics:
+
+<Accordion title="Metric Statistics Explained">
+  **avg** - Average (mean) value
+  - Quick overview but can be misleading with outliers
+
+  **min** - Minimum value observed
+  - Best-case performance
+
+  **med** - Median (50th percentile)
+  - Middle value; more representative than average
+
+  **max** - Maximum value observed
+  - Worst-case performance
+
+  **p(90)** - 90th percentile
+  - 90% of requests were faster than this
+
+  **p(95)** - 95th percentile
+  - Common SLA target
+  - 95% of requests were faster than this
+
+  **p(99)** - 99th percentile
+  - Catches most outliers
+  - Important for user experience
+
+  **p(99.9)** - 99.9th percentile
+  - Only the worst 0.1% of requests exceed this
+</Accordion>
+
+<Tip>
+Focus on percentiles (p95, p99) rather than averages. A low average with high p95/p99 indicates many users experience poor performance.
+</Tip>
+
+## Configure summary statistics
+
+Customize which statistics k6 displays:
+
+```bash
+k6 run --summary-trend-stats="med,p(95),p(99.9)" script.js
+```
+
+This displays only median, p95, and p99.9 values, reducing clutter.
+
+## Checks and validations
+
+Checks validate responses without stopping test execution. They appear in the summary as pass/fail rates:
+
+```javascript
+import http from 'k6/http';
+import { check } from 'k6';
+
+export default function () {
+  const res = http.get('https://quickpizza.grafana.com');
+  
+  check(res, {
+    'status is 200': (r) => r.status === 200,
+    'response time < 500ms': (r) => r.timings.duration < 500,
+    'body is not empty': (r) => r.body.length > 0,
+  });
+}
+```
+
+Results show the pass rate for each check:
+
+```text
+  ✓ status is 200
+  ✗ response time < 500ms
+  ✓ body is not empty
+
+  checks.........................: 66.67% ✓ 200  ✗ 100
+```
+
+<Info>
+Checks don't affect test execution. Use [thresholds](#thresholds-for-passfail-criteria) to fail tests based on performance criteria.
+</Info>
+
+## Thresholds for pass/fail criteria
+
+Thresholds define performance requirements. If thresholds fail, k6 exits with a non-zero code:
+
+```javascript
+export const options = {
+  thresholds: {
+    // 95% of requests must complete under 500ms
+    'http_req_duration': ['p(95)<500'],
+    
+    // Error rate must be below 1%
+    'http_req_failed': ['rate<0.01'],
+    
+    // 90% of checks must pass
+    'checks': ['rate>0.9'],
+    
+    // Throughput must be at least 100 req/s
+    'http_reqs': ['rate>100'],
+  },
+};
+```
+
+Threshold results appear at the end of the summary:
+
+```text
+     ✓ http_req_duration............: p(95)<500ms
+     ✓ http_req_failed..............: rate<0.01
+     ✗ checks.......................: rate>0.9
+```
+
+<Warning>
+Failed thresholds cause k6 to exit with code 99, failing CI/CD pipelines. Use this to enforce performance requirements.
+</Warning>
+
+## Custom metrics
+
+Create metrics that track business-specific data:
+
+```javascript
+import http from 'k6/http';
+import { Counter, Trend, Rate, Gauge } from 'k6/metrics';
+
+// Define custom metrics
+const orderCounter = new Counter('pizza_orders');
+const checkoutDuration = new Trend('checkout_duration');
+const checkoutSuccess = new Rate('checkout_success');
+const cartSize = new Gauge('cart_items');
+
+export const options = {
+  thresholds: {
+    'checkout_duration': ['p(95)<2000'],
+    'checkout_success': ['rate>0.95'],
+  },
+};
+
+export default function () {
+  const start = Date.now();
+  
+  const res = http.post('https://quickpizza.grafana.com/api/order', JSON.stringify({
+    items: ['margherita', 'pepperoni'],
+  }), {
+    headers: { 'Content-Type': 'application/json' },
+  });
+  
+  const duration = Date.now() - start;
+  const success = res.status === 200;
+  
+  // Record custom metrics
+  checkoutDuration.add(duration);
+  checkoutSuccess.add(success);
+  cartSize.add(2);
+  
+  if (success) {
+    orderCounter.add(1);
+  }
+}
+```
+
+Custom metrics appear in the summary alongside built-in metrics.
+
+## Exporting results
+
+For detailed analysis, export metrics to external systems.
+
+### JSON file
+
+Export all metrics to a JSON file:
+
+```bash
+k6 run --out json=results.json script.js
+```
+
+This creates a file with one JSON object per metric data point.
+
+### CSV file
+
+Export metrics to CSV format:
+
+```bash
+k6 run --out csv=results.csv script.js
+```
+
+### Multiple outputs
+
+Send results to multiple destinations:
+
+```bash
+k6 run \
+  --out json=results.json \
+  --out influxdb=http://localhost:8086/k6 \
+  script.js
+```
+
+<Tabs>
+  <Tab title="InfluxDB">
+    Stream results to InfluxDB for time-series analysis:
+
+    ```bash
+    k6 run --out influxdb=http://localhost:8086/k6 script.js
+    ```
+
+    Visualize in Grafana using [k6 dashboards](https://grafana.com/docs/k6/latest/results-output/grafana-dashboards/).
+  </Tab>
+
+  <Tab title="Prometheus">
+    Export metrics to Prometheus:
+
+    ```bash
+    k6 run --out experimental-prometheus-rw script.js
+    ```
+
+    Requires Prometheus remote write enabled.
+  </Tab>
+
+  <Tab title="Cloud">
+    Stream results to Grafana Cloud k6:
+
+    ```bash
+    k6 run --out cloud script.js
+    ```
+
+    Requires authentication and provides advanced visualization.
+  </Tab>
+
+  <Tab title="Other">
+    k6 supports outputs for:
+    - Amazon CloudWatch
+    - Datadog
+    - Dynatrace
+    - Elasticsearch
+    - New Relic
+    - StatsD
+    - And more...
+
+    See the [output documentation](https://grafana.com/docs/k6/latest/results-output/real-time/) for details.
+  </Tab>
+</Tabs>
+
+## Custom summary report
+
+Create custom end-of-test reports using `handleSummary()`:
+
+```javascript
+import http from 'k6/http';
+import { textSummary } from 'https://jslib.k6.io/k6-summary/0.0.1/index.js';
+
+export const options = {
+  vus: 10,
+  duration: '30s',
+};
+
+export default function () {
+  http.get('https://quickpizza.grafana.com');
+}
+
+export function handleSummary(data) {
+  return {
+    'stdout': textSummary(data, { indent: ' ', enableColors: true }),
+    'summary.json': JSON.stringify(data),
+    'summary.html': htmlReport(data),
+  };
+}
+
+function htmlReport(data) {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head><title>k6 Test Results</title></head>
+    <body>
+      <h1>Load Test Results</h1>
+      <p>Total Requests: ${data.metrics.http_reqs.values.count}</p>
+      <p>Failed Requests: ${data.metrics.http_req_failed.values.rate}</p>
+      <p>Avg Duration: ${data.metrics.http_req_duration.values.avg}ms</p>
+    </body>
+    </html>
+  `;
+  return html;
+}
+```
+
+This creates:
+- Terminal output (stdout)
+- JSON summary file
+- HTML report
+
+## Real-time results
+
+Monitor test progress in real-time using the web dashboard:
+
+```bash
+K6_WEB_DASHBOARD=true k6 run script.js
+```
+
+Open the provided URL in your browser to see live metrics during test execution.
+
+<Info>
+The web dashboard is built into k6 and requires no additional setup.
+</Info>
+
+## Analyzing results
+
+When reviewing test results, focus on:
+
+<Steps>
+  <Step title="Check error rate">
+    Ensure `http_req_failed` is below your acceptable threshold (typically < 1%).
+  </Step>
+  <Step title="Review response times">
+    Look at p95 and p99 of `http_req_duration`. These represent user experience better than averages.
+  </Step>
+  <Step title="Verify thresholds">
+    Check if all thresholds passed. Failed thresholds indicate performance issues.
+  </Step>
+  <Step title="Examine checks">
+    Review check pass rates. Low rates indicate functional issues.
+  </Step>
+  <Step title="Compare trends">
+    Run tests regularly and compare results over time to detect performance regressions.
+  </Step>
+</Steps>
+
+### Common issues
+
+<AccordionGroup>
+  <Accordion title="High http_req_duration with low http_req_waiting">
+    Network latency or connection overhead is high. Check `http_req_connecting` and `http_req_tls_handshaking`.
+  </Accordion>
+
+  <Accordion title="High http_req_blocked values">
+    Connection pool exhausted. Increase batch parallelism or check keep-alive settings.
+  </Accordion>
+
+  <Accordion title="Increasing response times over time">
+    System degradation. Could indicate memory leaks, resource exhaustion, or insufficient capacity.
+  </Accordion>
+
+  <Accordion title="Failed requests increasing with load">
+    System cannot handle the load. Scale infrastructure or optimize application.
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+Now that you understand k6 results:
+
+<CardGroup cols={2}>
+  <Card
+    title="Metrics Guide"
+    icon="chart-line"
+    href="https://grafana.com/docs/k6/latest/using-k6/metrics/"
+  >
+    Deep dive into all k6 metrics and metric types
+  </Card>
+  <Card
+    title="Thresholds"
+    icon="gauge-high"
+    href="https://grafana.com/docs/k6/latest/using-k6/thresholds/"
+  >
+    Learn advanced threshold configurations
+  </Card>
+  <Card
+    title="Result Outputs"
+    icon="database"
+    href="https://grafana.com/docs/k6/latest/results-output/real-time/"
+  >
+    Explore all result export options
+  </Card>
+  <Card
+    title="Grafana Dashboards"
+    icon="chart-bar"
+    href="https://grafana.com/docs/k6/latest/results-output/grafana-dashboards/"
+  >
+    Visualize results in Grafana
+  </Card>
+</CardGroup>

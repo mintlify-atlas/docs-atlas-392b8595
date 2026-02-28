@@ -1,0 +1,329 @@
+---
+title: Building Custom k6 Binaries
+description: Use xk6 to build custom k6 binaries with extensions using Go or Docker
+icon: box
+---
+
+To use extensions that aren't available through automatic resolution, or to bundle multiple extensions together, build a custom k6 binary using [xk6](https://github.com/grafana/xk6).
+
+You can build custom binaries locally with Go or use the xk6 Docker image.
+
+## Build with Go and xk6
+
+Building locally gives you direct control over the build process and is ideal for development.
+
+### Before you start
+
+<Steps>
+  <Step title="Install Go">
+    Set up [Go](https://golang.org/doc/install) (version 1.19 or higher) and ensure `go version` returns the correct version.
+  </Step>
+  
+  <Step title="Install Git">
+    Install [Git](https://git-scm.com/) for downloading extension sources.
+  </Step>
+  
+  <Step title="Install xk6">
+    Install xk6 with a single command:
+    
+    ```bash
+    go install go.k6.io/xk6/cmd/xk6@latest
+    ```
+  </Step>
+</Steps>
+
+Verify installation:
+
+<CodeGroup>
+```bash Linux/Mac
+which xk6
+```
+
+```bash Windows
+where xk6
+```
+</CodeGroup>
+
+<Note>
+If the command doesn't return a path, ensure `$GOPATH/bin` is in your `$PATH`. See the [Go documentation](https://golang.org/cmd/go/#hdr-GOPATH_environment_variable) for details.
+</Note>
+
+### Build your first extension
+
+Once installed, build a k6 binary with extensions using the `xk6 build` command:
+
+```bash
+xk6 build latest \
+  --with github.com/grafana/xk6-sql@v0.0.1 \
+  --with github.com/grafana/xk6-output-prometheus-remote
+```
+
+This creates a `k6` binary in the current directory with the [`xk6-sql`](https://github.com/grafana/xk6-sql) and [`xk6-output-prometheus-remote`](https://github.com/grafana/xk6-output-prometheus-remote) extensions.
+
+Output:
+
+```text
+... [INFO] Build environment ready
+... [INFO] Building k6
+... [INFO] Build complete: ./k6
+
+xk6 has now produced a new k6 binary which may be different than the command on your system path!
+Be sure to run './k6 run <SCRIPT_NAME>' from the current directory.
+```
+
+### Command breakdown
+
+The xk6 command syntax:
+
+```text
+xk6 build [<k6_version>]
+    [--output <file>]
+    [--with <module[@version][=replacement]>...]
+    [--replace <module=replacement>...]
+
+Flags:
+  --output   specifies the new binary name [default: 'k6']
+  --replace  enables override of dependencies for k6 and extensions [default: none]
+  --with     the extension module to be included in the binary [default: none]
+```
+
+<Warning>
+The `--replace` flag should be considered an advanced feature to be avoided unless required.
+</Warning>
+
+#### Understanding the build command
+
+From the example above:
+
+- **Version**: `latest` builds using the latest k6 source code. Consider using a stable [release version](https://github.com/grafana/k6/releases) (e.g., `v0.45.1`) as a best practice.
+- **Extension modules**: Each `--with` flag specifies a full GitHub URI. Without a version, it defaults to `latest`. Lock versions like `xk6-sql@v0.0.1` for stability.
+- **Output location**: Without `--output`, the binary is named `k6` in the current directory. Use `--output k6-extended` for a custom name or `--output /tmp/k6` for a different location.
+
+Verify your build:
+
+```bash
+./k6 version
+```
+
+Output shows the k6 version and included extensions:
+
+```text
+k6 v0.45.1 ((devel), go1.20.1, linux/amd64)
+Extensions:
+  github.com/grafana/xk6-output-prometheus-remote v0.3.0, xk6-prometheus-remote [output]
+  github.com/grafana/xk6-sql v0.0.1, k6/x/sql [js]
+```
+
+### Build from a local repository
+
+If you've cloned an extension repository locally and want to use that version:
+
+```bash
+cd /path/to/xk6-sql
+xk6 build --with github.com/grafana/xk6-sql=.
+```
+
+The `.` tells xk6 to use the current directory as the replacement for the module.
+
+### Run your extended binary
+
+Now run test scripts using the bundled extensions:
+
+```bash
+./k6 run my-script.js
+```
+
+<Note>
+Be sure to specify `./k6` on Linux/Mac to use the local binary, otherwise the system may execute a different k6 on your PATH. Windows shells search the current directory by default.
+</Note>
+
+## Build with Docker
+
+Using the [xk6 Docker image](https://hub.docker.com/r/grafana/xk6/) simplifies the process by avoiding local Go setup.
+
+<Note>
+This guide covers creating a custom k6 **binary** using Docker. To create a Docker **image** with a custom k6 binary, refer to the [Using modules with Docker](https://grafana.com/docs/k6/latest/using-k6/modules/#using-modules-with-docker) documentation.
+</Note>
+
+### Build your first extension
+
+Build a custom k6 binary with the latest versions of k6 and extensions:
+
+<CodeGroup>
+```bash Linux
+docker run --rm -u "$(id -u):$(id -g)" -v "${PWD}:/xk6" grafana/xk6 build \
+  --with github.com/mostafa/xk6-kafka \
+  --with github.com/grafana/xk6-output-influxdb
+```
+
+```bash macOS
+docker run --rm -e GOOS=darwin -u "$(id -u):$(id -g)" -v "${PWD}:/xk6" \
+  grafana/xk6 build \
+  --with github.com/mostafa/xk6-kafka \
+  --with github.com/grafana/xk6-output-influxdb
+```
+
+```powershell Windows PowerShell
+docker run --rm -e GOOS=windows -u "$(id -u):$(id -g)" -v "${PWD}:/xk6" `
+  grafana/xk6 build --output k6.exe `
+  --with github.com/mostafa/xk6-kafka `
+  --with github.com/grafana/xk6-output-influxdb
+```
+
+```batch Windows CMD
+docker run --rm -e GOOS=windows -v "%cd%:/xk6" ^
+  grafana/xk6 build --output k6.exe ^
+  --with github.com/mostafa/xk6-kafka ^
+  --with github.com/grafana/xk6-output-influxdb
+```
+</CodeGroup>
+
+This creates a `k6` (or `k6.exe`) binary in the current working directory.
+
+### Build with specific versions
+
+To build with concrete versions (k6 `v0.45.1`, xk6-kafka `v0.19.1`, xk6-output-influxdb `v0.4.1`):
+
+<CodeGroup>
+```bash Linux
+docker run --rm -u "$(id -u):$(id -g)" -v "${PWD}:/xk6" grafana/xk6 build v0.45.1 \
+  --with github.com/mostafa/xk6-kafka@v0.19.1 \
+  --with github.com/grafana/xk6-output-influxdb@v0.4.1
+```
+
+```bash macOS
+docker run --rm -e GOOS=darwin -u "$(id -u):$(id -g)" -v "${PWD}:/xk6" \
+  grafana/xk6 build v0.45.1 \
+  --with github.com/mostafa/xk6-kafka@v0.19.1 \
+  --with github.com/grafana/xk6-output-influxdb@v0.4.1
+```
+
+```powershell Windows PowerShell
+docker run --rm -e GOOS=windows -u "$(id -u):$(id -g)" -v "${PWD}:/xk6" `
+  grafana/xk6 build v0.45.1 --output k6.exe `
+  --with github.com/mostafa/xk6-kafka@v0.19.1 `
+  --with github.com/grafana/xk6-output-influxdb@v0.4.1
+```
+</CodeGroup>
+
+### Docker command breakdown
+
+The Docker-specific part of the command:
+
+```bash
+docker run --rm -u "$(id -u):$(id -g)" -v "${PWD}:/xk6"
+```
+
+- `--rm` - Container is destroyed after the build completes
+- `-u` - Specifies user and group IDs so the binary has the same permissions as the host user
+- `-v` - Mounts the current directory inside the container so the binary can be written to it
+
+For Windows and macOS, add the target OS:
+
+```bash
+-e GOOS=<target os>
+```
+
+The remainder follows standard [xk6 command syntax](#command-breakdown).
+
+### Verify the build
+
+Run the version command to check your build:
+
+<CodeGroup>
+```bash Linux/macOS
+./k6 version
+```
+
+```batch Windows
+k6.exe version
+```
+</CodeGroup>
+
+Output:
+
+```text
+k6 v0.45.1 ((devel), go1.20.1, darwin/amd64)
+Extensions:
+  github.com/grafana/xk6-output-influxdb v0.4.1, xk6-influxdb [output]
+  github.com/mostafa/xk6-kafka v0.19.1, k6/x/kafka [js]
+```
+
+### Run your extended binary
+
+<CodeGroup>
+```bash Linux/macOS
+./k6 run my-script.js
+```
+
+```batch Windows
+k6.exe run my-script.js
+```
+</CodeGroup>
+
+<Note>
+On Linux/Mac, specify `./k6` to use the local binary. Windows shells search the current directory by default.
+</Note>
+
+## Common build scenarios
+
+### Multiple extensions
+
+Bundle multiple extensions in one binary:
+
+```bash
+xk6 build v0.45.1 \
+  --with github.com/grafana/xk6-sql@v0.0.1 \
+  --with github.com/grafana/xk6-output-prometheus-remote \
+  --with github.com/mostafa/xk6-kafka@v0.19.1 \
+  --with github.com/grafana/xk6-output-influxdb@v0.4.1
+```
+
+### Output to specific location
+
+```bash
+xk6 build --output ~/bin/k6-custom \
+  --with github.com/grafana/xk6-sql@v0.0.1
+```
+
+### Latest development version
+
+```bash
+xk6 build latest \
+  --with github.com/grafana/xk6-disruptor@latest
+```
+
+<Warning>
+Using `latest` builds from the bleeding edge. Use stable release versions for production.
+</Warning>
+
+## Troubleshooting
+
+If you encounter issues:
+
+- **Go environment**: Ensure `go version` works and `$GOPATH/bin` is in your `$PATH`
+- **xk6 not found**: Verify installation with `which xk6` or `where xk6`
+- **Build errors**: Check extension compatibility with your k6 version
+- **Docker permissions**: On Linux, use `-u "$(id -u):$(id -g)"` to avoid permission issues
+
+For more help, search the [k6 Community Forum](https://community.grafana.com/c/grafana-k6/extensions/82).
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Create Extensions" icon="hammer" href="/extensions/create">
+    Build your own k6 extensions
+  </Card>
+  
+  <Card title="Explore Extensions" icon="compass" href="/extensions/explore">
+    Find extensions for your use case
+  </Card>
+  
+  <Card title="Protocol Extensions" icon="network-wired" href="/extensions/protocol-extensions">
+    Use MQTT, Redis, and SQL extensions
+  </Card>
+  
+  <Card title="xk6 Repository" icon="github" href="https://github.com/grafana/xk6">
+    View xk6 source and documentation
+  </Card>
+</CardGroup>

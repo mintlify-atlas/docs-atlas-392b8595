@@ -1,0 +1,184 @@
+---
+title: Grafana k6 Documentation
+description: Open-source, developer-friendly load testing tool for testing the reliability and performance of your applications and infrastructure.
+---
+
+<img
+  className="block"
+  src="/images/k6-logo.svg"
+  alt="Grafana k6"
+/>
+
+# Prevent performance issues with k6
+
+Grafana k6 is an open-source, developer-friendly, and extensible load testing tool. k6 allows you to prevent performance issues and proactively improve reliability.
+
+Using k6, you can test the reliability and performance of your application and infrastructure. k6 helps engineering teams prevent errors and SLO breaches, enabling them to build resilient and high-performing applications that scale.
+
+## What is k6?
+
+k6 is a CLI-based load testing tool written in Go with test scripts in JavaScript. It's designed for developers, QA engineers, SDETs, and SREs who need to:
+
+- Simulate realistic user behavior
+- Identify performance bottlenecks before production
+- Validate system reliability under load
+- Integrate performance testing into CI/CD pipelines
+
+<CardGroup cols={2}>
+  <Card
+    title="Why k6?"
+    icon="question"
+    href="/why-k6"
+  >
+    Learn why k6 is the right choice for your load testing needs
+  </Card>
+  <Card
+    title="Installation"
+    icon="download"
+    href="/get-started/installation"
+  >
+    Install k6 on Linux, macOS, Windows, or Docker
+  </Card>
+  <Card
+    title="Write Your First Test"
+    icon="code"
+    href="/get-started/first-test"
+  >
+    Create your first k6 test script in minutes
+  </Card>
+  <Card
+    title="Understanding Results"
+    icon="chart-line"
+    href="/get-started/results"
+  >
+    Learn how to read and analyze k6 metrics
+  </Card>
+</CardGroup>
+
+## Key features
+
+<CardGroup cols={3}>
+  <Card title="JavaScript Testing" icon="js">
+    Write tests in JavaScript with a familiar syntax. No need to learn a new language.
+  </Card>
+  <Card title="CLI-Based" icon="terminal">
+    Run tests from your terminal, CI/CD pipelines, or automation tools.
+  </Card>
+  <Card title="Developer-Friendly" icon="code">
+    Built for developers with auto-completion, TypeScript support, and version control integration.
+  </Card>
+  <Card title="High Performance" icon="gauge-high">
+    Generate massive load with minimal resources. Run thousands of virtual users on a single machine.
+  </Card>
+  <Card title="Extensible" icon="puzzle-piece">
+    Extend k6 with custom protocols using extensions or test browser performance with the browser module.
+  </Card>
+  <Card title="CI/CD Integration" icon="arrows-spin">
+    Seamlessly integrate with Jenkins, GitHub Actions, GitLab CI, and other automation tools.
+  </Card>
+</CardGroup>
+
+## Common use cases
+
+Engineering teams use k6 for:
+
+### Load and performance testing
+
+k6 is optimized for minimal resource consumption and designed for running high-load performance tests such as spike, stress, or soak tests.
+
+### Browser performance testing
+
+Through the k6 browser API, you can run browser-based performance tests and collect browser metrics to identify performance issues related to browsers.
+
+### Performance and synthetic monitoring
+
+Schedule tests to run with minimal load very frequently, continuously validating the performance and availability of your production environment.
+
+### Automation of performance tests
+
+k6 integrates seamlessly with CI/CD and automation tools, enabling engineering teams to automate performance testing as part of their development and release cycle.
+
+### Chaos and resilience testing
+
+Use k6 to simulate traffic as part of your chaos experiments or inject different types of faults in Kubernetes with xk6-disruptor.
+
+### Infrastructure testing
+
+With k6 extensions, you can add support for new protocols or use a particular client to directly test individual systems within your infrastructure.
+
+## Get started in minutes
+
+<Steps>
+  <Step title="Install k6">
+    Install k6 using your package manager or Docker:
+    ```sh
+    # macOS
+    brew install k6
+
+    # Linux
+    sudo apt-get install k6
+
+    # Docker
+    docker pull grafana/k6
+    ```
+  </Step>
+  <Step title="Write a test script">
+    Create a simple test file `test.js`:
+    ```javascript
+    import http from 'k6/http';
+    import { sleep } from 'k6';
+
+    export const options = {
+      vus: 10,
+      duration: '30s',
+    };
+
+    export default function () {
+      http.get('https://test.k6.io');
+      sleep(1);
+    }
+    ```
+  </Step>
+  <Step title="Run your test">
+    Execute the test from your terminal:
+    ```sh
+    k6 run test.js
+    ```
+  </Step>
+  <Step title="Analyze results">
+    View the summary statistics in your terminal, including response times, throughput, and error rates.
+  </Step>
+</Steps>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Get Started Guide"
+    icon="rocket"
+    href="/get-started/installation"
+  >
+    Follow our step-by-step guide to start testing
+  </Card>
+  <Card
+    title="JavaScript API Reference"
+    icon="book"
+    href="https://grafana.com/docs/k6/latest/javascript-api/"
+  >
+    Explore the complete k6 API documentation
+  </Card>
+  <Card
+    title="Testing Guides"
+    icon="lightbulb"
+    href="https://grafana.com/docs/k6/latest/testing-guides/"
+  >
+    Learn testing strategies and best practices
+  </Card>
+  <Card
+    title="Example Scripts"
+    icon="file-code"
+    href="https://grafana.com/docs/k6/latest/examples/"
+  >
+    Browse real-world k6 test examples
+  </Card>
+</CardGroup>

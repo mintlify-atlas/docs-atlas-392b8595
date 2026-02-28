@@ -1,0 +1,185 @@
+---
+title: Glossary
+description: Technical terms commonly used when discussing k6, with definitions
+icon: book
+---
+
+# Glossary
+
+What we talk about when we talk about k6. In discussion about k6, some terms have a precise, technical meaning. If a certain term in these docs confuses you, consult this list for a definition.
+
+## Application performance monitoring
+
+_(Or APM)_. The practice of monitoring the performance, availability, and reliability of a system.
+
+## Checks
+
+Checks are true/false conditions that evaluate the content of some value in the JavaScript runtime.
+
+[Learn more about checks](/using-k6/checks)
+
+## Concurrent sessions
+
+The number of simultaneous VU requests in a test run.
+
+## Data correlation
+
+The process of taking dynamic data received from the system under test and reusing the data in a subsequent request.
+
+[Learn more about correlation](/examples/correlation-and-dynamic-data)
+
+## Data parameterization
+
+The process of turning test values into reusable parameters, e.g. through variables and shared arrays.
+
+[Learn more about data parameterization](/examples/data-parameterization)
+
+## Dynamic data
+
+Data that might change or will change during test runs or across test runs. Common examples are order IDs, session tokens, or timestamps.
+
+## Environment variables
+
+User-definable values which may be utilized by the operating system and other programs.
+
+[Learn more about environment variables](/reference/environment-variables)
+
+## Execution segment
+
+A partition, or fractional portion, of an overall test run.
+
+## Sobek
+
+A JavaScript engine written in Go. k6 binaries are embedded with Sobek, enabling test scripting in JavaScript. Sobek is a fork of [goja](https://github.com/dop251/goja).
+
+[Sobek repository](https://github.com/grafana/sobek)
+
+## Graceful stop
+
+A period that lets VUs finish an iteration at the end of a load test. Graceful stops prevent abrupt halts in execution.
+
+## Happy path
+
+The default system behavior that happens when a known input produces an expected output. A common mistake in performance testing happens when scripts account only for the best case (the happy path). Most load tests try to discover system errors, so test scripts should include exception handling.
+
+## HTTP archive
+
+_(Or HAR file)_. A file containing logs of browser interactions with the system under test. All included transactions are stored as JSON-formatted text. You can use these archives to generate test scripts.
+
+## Iteration
+
+A single run in the execution of the `default function`, or scenario `exec` function. You can set iterations across all VUs, or per VU.
+
+[Learn more about the test lifecycle](/using-k6/test-lifecycle)
+
+## k6 Cloud
+
+The proper name for the entire cloud product, comprising both k6 Cloud Execution and k6 Cloud Test Results.
+
+[k6 Cloud docs](https://grafana.com/docs/grafana-cloud/testing/k6/)
+
+## k6 options
+
+Values that configure a k6 test run. You can set options with command-line flags, environment variables, and in the script.
+
+[Learn more about k6 options](/using-k6/options)
+
+## Kubernetes
+
+An open-source system for automating the deployment, scaling, and management of containerized applications.
+
+## Lifecycle function
+
+A function called in a specific sequence in the k6 runtime. The most important lifecycle function is the default function, which runs the VU code.
+
+[Learn more about the test lifecycle](/using-k6/test-lifecycle)
+
+## Load test
+
+A test that assesses the performance of the system under test in terms of concurrent users or requests per second.
+
+[Learn more about load testing](/testing-guides/test-types)
+
+## Metric
+
+A measure of how the system performs during a test run. `http_req_duration` is an example of a built-in k6 metric. Besides built-ins, you can also create custom metrics.
+
+[Learn more about metrics](/using-k6/metrics)
+
+## Metric sample
+
+A single value for a metric in a test run. For example, the value of `http_req_duration` from a single VU request.
+
+## Reliability
+
+The probability that a system under test performs as intended.
+
+## Requests per second
+
+The rate at which a test sends requests to the system under test.
+
+## Saturation
+
+A condition when a system reaches full resource utilization and can handle no additional requests.
+
+## Scenario
+
+An object in a test script that makes in-depth configurations to how VUs and iterations are scheduled. With scenarios, your test runs can model diverse traffic patterns.
+
+[Learn more about scenarios](/using-k6/scenarios)
+
+## Scenario executor
+
+A property of a scenario that configures VU behavior. You can use executors to configure whether to designate iterations as shared between VUs or to run per VU, or whether the VU concurrency is constant or changing.
+
+## Smoke test
+
+A regular load test configured for minimum load. Smoke tests verify that the script has no errors and that the system under test can handle a minimal amount of load.
+
+[Learn more about smoke testing](/testing-guides/test-types)
+
+## Soak test
+
+A test that tries to uncover performance and reliability issues stemming from a system being under pressure for an extended duration.
+
+[Learn more about soak testing](/testing-guides/test-types)
+
+## Stress test
+
+A test that assesses the availability and stability of the system under heavy load.
+
+[Learn more about stress testing](/testing-guides/test-types)
+
+## System under test
+
+The software that the load test tests. This could be an API, a website, infrastructure, or any combination of these.
+
+## Test run
+
+An individual execution of a test script over all configured iterations.
+
+## Test duration
+
+The length of time that a test runs. When duration is set as an option, VU code runs for as many iterations as possible in the length of time specified.
+
+## Test script
+
+The actual code that defines how the test behaves and what requests it makes, along with all (or at least most) configuration needed to run the test.
+
+## Threshold
+
+A pass/fail criteria that evaluates whether a metric reaches a certain value. Testers often use thresholds to codify SLOs.
+
+[Learn more about thresholds](/using-k6/thresholds)
+
+## Throughput
+
+The rate of successful message delivery. In k6, throughput is measured in requests per second.
+
+## Virtual user
+
+_(Or VU)_. The simulated users that run separate and concurrent iterations of your test script.
+
+## YAML
+
+A human-readable data-serialization format commonly used for configuration files.

@@ -1,0 +1,428 @@
+---
+title: 'Data Uploads'
+description: 'Test file upload endpoints with multipart requests and binary data handling'
+icon: 'upload'
+---
+
+Test file upload functionality including images, documents, and other binary data with multipart form submissions.
+
+## Loading Files
+
+Use the `open()` function to read file contents during the init context (before VU execution):
+
+### Text Files
+
+Load and parse JSON data:
+
+```json
+{
+  "my_key": "has a value"
+}
+```
+
+```javascript
+const data = JSON.parse(open('./data.json'));
+
+export default function () {
+  console.log(data.my_key); // Output: has a value
+}
+```
+
+### Binary Files
+
+Add `"b"` as the second argument to open binary files:
+
+```javascript
+const binFile = open('./image.png', 'b');
+
+export default function () {
+  // Use binFile for uploads
+}
+```
+
+<Note>
+The `open()` function executes in the init context, so files are loaded once per VU before the test starts. This is more efficient than reading files in every iteration.
+</Note>
+
+## Basic File Upload
+
+Upload a file using multipart form data:
+
+```javascript
+import http from 'k6/http';
+import { sleep } from 'k6';
+
+const binFile = open('/path/to/file.bin', 'b');
+
+export default function () {
+  const data = {
+    field: 'this is a standard form field',
+    file: http.file(binFile, 'test.bin'),
+  };
+
+  const res = http.post('https://example.com/upload', data);
+  sleep(3);
+}
+```
+
+<Tip>
+When a JavaScript object passed to `http.post()` contains a `FileData` property (created by `http.file()`), k6 automatically constructs a multipart request.
+</Tip>
+
+## Image Upload Example
+
+Upload an image with metadata:
+
+```javascript
+import http from 'k6/http';
+import { check } from 'k6';
+
+const image = open('./profile-photo.jpg', 'b');
+
+export default function () {
+  const data = {
+    username: 'testuser',
+    description: 'My profile photo',
+    photo: http.file(image, 'profile.jpg', 'image/jpeg'),
+  };
+
+  const res = http.post('https://api.example.com/upload/profile', data);
+  
+  check(res, {
+    'upload successful': (r) => r.status === 200,
+    'has file URL': (r) => r.json('url') !== undefined,
+  });
+}
+```
+
+## Advanced Multipart Uploads
+
+For more control over multipart requests, use the `FormData` polyfill:
+
+### Multiple File Upload
+
+```javascript
+import http from 'k6/http';
+import { check } from 'k6';
+import { FormData } from 'https://jslib.k6.io/formdata/0.0.2/index.js';
+
+const img1 = open('/path/to/image1.png', 'b');
+const img2 = open('/path/to/image2.jpg', 'b');
+const txt = open('/path/to/text.txt');
+
+export default function () {
+  const fd = new FormData();
+  fd.append('someTextField', 'someValue');
+  fd.append('aBinaryFile', {
+    data: new Uint8Array(img1).buffer,
+    filename: 'logo.png',
+    content_type: 'image/png',
+  });
+  fd.append('anotherTextField', 'anotherValue');
+  fd.append('images', http.file(img1, 'image1.png', 'image/png'));
+  fd.append('images', http.file(img2, 'image2.jpg', 'image/jpeg'));
+  fd.append('text', http.file(txt, 'text.txt', 'text/plain'));
+
+  const res = http.post('https://quickpizza.grafana.com/api/post', fd.body(), {
+    headers: { 'Content-Type': 'multipart/form-data; boundary=' + fd.boundary },
+  });
+  
+  check(res, {
+    'is status 200': (r) => r.status === 200,
+  });
+}
+```
+
+<Note>
+When using `FormData`, you must manually set the `Content-Type` header with the boundary value.
+</Note>
+
+### Why Use FormData?
+
+The `FormData` polyfill solves two limitations:
+
+1. **Ordered fields**: JavaScript objects don't guarantee property order, but some APIs (like AWS S3) require specific field ordering
+2. **Multiple files per field**: Upload multiple files under the same form field name
+
+<Tabs>
+  <Tab title="Basic Upload">
+    Simple uploads with automatic multipart handling:
+    
+    ```javascript
+    const data = {
+      file: http.file(binFile, 'file.bin'),
+    };
+    
+    http.post(url, data);
+    ```
+  </Tab>
+  
+  <Tab title="FormData Upload">
+    Advanced uploads with explicit control:
+    
+    ```javascript
+    const fd = new FormData();
+    fd.append('file1', http.file(binFile1, 'file1.bin'));
+    fd.append('file2', http.file(binFile2, 'file2.bin'));
+    
+    http.post(url, fd.body(), {
+      headers: { 'Content-Type': 'multipart/form-data; boundary=' + fd.boundary },
+    });
+    ```
+  </Tab>
+</Tabs>
+
+## Upload with Authentication
+
+Combine file uploads with authentication:
+
+```javascript
+import http from 'k6/http';
+import { check } from 'k6';
+
+const document = open('./report.pdf', 'b');
+
+export function setup() {
+  // Get authentication token
+  const loginRes = http.post(
+    'https://api.example.com/auth/login',
+    JSON.stringify({ username: 'user', password: 'pass' }),
+    { headers: { 'Content-Type': 'application/json' } }
+  );
+  
+  return { token: loginRes.json('token') };
+}
+
+export default function (data) {
+  const uploadData = {
+    title: 'Monthly Report',
+    category: 'reports',
+    file: http.file(document, 'report.pdf', 'application/pdf'),
+  };
+  
+  const params = {
+    headers: {
+      'Authorization': `Bearer ${data.token}`,
+    },
+  };
+  
+  const res = http.post('https://api.example.com/upload', uploadData, params);
+  
+  check(res, {
+    'upload successful': (r) => r.status === 201,
+    'has document ID': (r) => r.json('id') !== undefined,
+  });
+}
+```
+
+## Dynamic File Generation
+
+Generate file content dynamically:
+
+```javascript
+import http from 'k6/http';
+import { randomString } from 'https://jslib.k6.io/k6-utils/1.2.0/index.js';
+
+export default function () {
+  // Generate CSV content
+  const csvContent = `name,email,age\n${randomString(8)},test@example.com,25\n`;
+  
+  const data = {
+    description: 'Generated CSV data',
+    file: http.file(csvContent, 'data.csv', 'text/csv'),
+  };
+  
+  http.post('https://api.example.com/upload', data);
+}
+```
+
+## Large File Uploads
+
+Test large file uploads with progress tracking:
+
+```javascript
+import http from 'k6/http';
+import { Counter, Trend } from 'k6/metrics';
+
+const uploadSize = new Trend('upload_size_bytes');
+const uploadCounter = new Counter('uploads_completed');
+
+const largeFile = open('./large-video.mp4', 'b');
+
+export const options = {
+  vus: 5,
+  duration: '1m',
+  thresholds: {
+    'http_req_duration': ['p(95)<30000'], // 95% of uploads under 30s
+    'upload_size_bytes': ['avg>10000000'], // Average upload over 10MB
+  },
+};
+
+export default function () {
+  const data = {
+    video: http.file(largeFile, 'video.mp4', 'video/mp4'),
+    title: 'Test Video',
+  };
+  
+  const res = http.post('https://api.example.com/upload/video', data);
+  
+  if (res.status === 200) {
+    uploadSize.add(largeFile.length);
+    uploadCounter.add(1);
+  }
+}
+```
+
+<Warning>
+Large file uploads consume memory. With multiple VUs, monitor system resources to avoid out-of-memory errors.
+</Warning>
+
+## Common Scenarios
+
+<AccordionGroup>
+  <Accordion title="Avatar/Profile Picture Upload">
+    ```javascript
+    import http from 'k6/http';
+    import { check } from 'k6';
+    
+    const avatar = open('./avatars/user1.png', 'b');
+    
+    export default function () {
+      const data = {
+        userId: `user_${__VU}`,
+        avatar: http.file(avatar, 'avatar.png', 'image/png'),
+      };
+      
+      const res = http.post('https://api.example.com/users/avatar', data);
+      
+      check(res, {
+        'avatar uploaded': (r) => r.status === 200,
+        'returns avatar URL': (r) => r.json('avatarUrl') !== undefined,
+      });
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Document Upload with Metadata">
+    ```javascript
+    import { FormData } from 'https://jslib.k6.io/formdata/0.0.2/index.js';
+    import http from 'k6/http';
+    
+    const document = open('./contract.pdf', 'b');
+    
+    export default function () {
+      const fd = new FormData();
+      fd.append('document', http.file(document, 'contract.pdf', 'application/pdf'));
+      fd.append('metadata', JSON.stringify({
+        documentType: 'contract',
+        version: '1.0',
+        department: 'legal',
+      }));
+      
+      http.post('https://api.example.com/documents', fd.body(), {
+        headers: { 'Content-Type': 'multipart/form-data; boundary=' + fd.boundary },
+      });
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Batch File Upload">
+    ```javascript
+    import { FormData } from 'https://jslib.k6.io/formdata/0.0.2/index.js';
+    import http from 'k6/http';
+    
+    const files = [
+      open('./file1.txt', 'b'),
+      open('./file2.txt', 'b'),
+      open('./file3.txt', 'b'),
+    ];
+    
+    export default function () {
+      const fd = new FormData();
+      
+      files.forEach((file, index) => {
+        fd.append('files', http.file(file, `file${index + 1}.txt`, 'text/plain'));
+      });
+      
+      http.post('https://api.example.com/upload/batch', fd.body(), {
+        headers: { 'Content-Type': 'multipart/form-data; boundary=' + fd.boundary },
+      });
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+### Load Files Once
+
+Load files in init context, not in the VU function:
+
+```javascript
+// Good: Load once per VU
+const file = open('./large-file.bin', 'b');
+
+export default function () {
+  http.post(url, { file: http.file(file, 'file.bin') });
+}
+
+// Bad: Loads file every iteration
+export default function () {
+  const file = open('./large-file.bin', 'b'); // Don't do this!
+  http.post(url, { file: http.file(file, 'file.bin') });
+}
+```
+
+### Set Appropriate Timeouts
+
+Large uploads may take time:
+
+```javascript
+export const options = {
+  httpDebug: 'full', // Debug upload issues
+};
+
+const res = http.post(url, data, {
+  timeout: '60s', // Allow up to 60 seconds for upload
+});
+```
+
+### Validate Upload Results
+
+Always check upload success:
+
+```javascript
+check(res, {
+  'upload successful': (r) => r.status === 200 || r.status === 201,
+  'has file ID': (r) => r.json('fileId') !== undefined,
+  'correct file size': (r) => r.json('size') === file.length,
+});
+```
+
+## API Reference
+
+### Key Functions
+
+- **`open(filePath, [mode])`** - Load file contents. Use `"b"` for binary mode
+- **`http.file(data, [filename], [contentType])`** - Wrap data as `FileData` for multipart requests
+- **`FormData.append(name, value)`** - Add fields to multipart form
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="HTTP Authentication" icon="shield-check" href="/examples/http-authentication">
+    Add authentication to upload requests
+  </Card>
+  
+  <Card title="API CRUD Operations" icon="database" href="/examples/api-crud-operations">
+    Complete API testing workflows
+  </Card>
+  
+  <Card title="API Reference: http.file()" icon="book" href="/api-reference/k6-http-file">
+    Complete http.file() documentation
+  </Card>
+  
+  <Card title="API Reference: open()" icon="book" href="/api-reference/open">
+    Complete open() documentation
+  </Card>
+</CardGroup>

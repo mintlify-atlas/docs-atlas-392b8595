@@ -1,0 +1,548 @@
+---
+title: Load Testing Websites
+description: Strategies for load testing websites and web applications with k6, including protocol-based, browser-based, and hybrid approaches
+---
+
+Load testing websites requires understanding the difference between backend and frontend performance, choosing the right testing approach, and crafting realistic scenarios. This guide covers best practices for testing web applications with k6.
+
+## Testing Approaches
+
+Website load testing can be approached from different angles depending on your goals:
+
+### Backend vs Frontend Performance
+
+<CardGroup cols={2}>
+  <Card title="Backend Performance" icon="server">
+    **What it tests:** Application servers, APIs, database queries, server-side processing
+    
+    **Benefits:**
+    - Suitable for high-load tests
+    - Less resource-intensive
+    - Tests early in development
+    - Targets specific components
+  </Card>
+  
+  <Card title="Frontend Performance" icon="browser">
+    **What it tests:** Page rendering, JavaScript execution, asset loading, user interactions
+    
+    **Benefits:**
+    - Measures actual user experience
+    - Tests browser compatibility
+    - Validates visual elements
+    - Captures end-to-end metrics
+  </Card>
+</CardGroup>
+
+<Note>
+**Best practice:** Test both backend and frontend performance. Backend issues often worsen under load, while frontend performance stays relatively constant but represents the first mile of user experience.
+</Note>
+
+## Testing Methodologies
+
+### Protocol-Based Testing
+
+Protocol-based testing simulates HTTP requests directly to application servers, bypassing the browser:
+
+```javascript
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+
+export function Homepage() {
+  const params = {
+    'sec-ch-ua': '"Chromium";v="94", "Google Chrome";v="94"',
+    'accept-encoding': 'gzip, deflate, br',
+    'accept-language': 'en-GB,en;q=0.9',
+  };
+
+  // Fetch homepage with embedded resources
+  const responses = http.batch([
+    ['GET', 'https://mywebsite.com/', params],
+    ['GET', 'https://mywebsite.com/style.min.css', params],
+    ['GET', 'https://mywebsite.com/header.png', params],
+    ['GET', 'https://mywebsite.com/polyfill.min.js', params],
+  ]);
+  
+  check(responses[0], {
+    'homepage loaded': (r) => r.body.includes('Welcome to my site'),
+  });
+
+  sleep(4);
+
+  // View products page
+  const productResponses = http.batch([
+    ['GET', 'https://mywebsite.com/products', params],
+    ['GET', 'https://mywebsite.com/style.css', params],
+    ['GET', 'https://mywebsite.com/product1.jpg', params],
+    ['GET', 'https://mywebsite.com/product2.jpg', params],
+  ]);
+  
+  check(productResponses[0], {
+    'products loaded': (r) => r.body.includes('Add to Cart'),
+  });
+
+  sleep(1);
+}
+```
+
+**When to use:**
+- Testing backend infrastructure
+- Generating high load
+- Component-level testing
+- Early development testing
+
+### Browser-Based Testing
+
+Browser-based testing uses real browser instances to interact with your application:
+
+```javascript
+import { browser } from 'k6/browser';
+import { check } from 'k6';
+
+export const options = {
+  scenarios: {
+    browser_test: {
+      executor: 'constant-vus',
+      vus: 5,
+      duration: '30s',
+      options: {
+        browser: {
+          type: 'chromium',
+        },
+      },
+    },
+  },
+};
+
+export default async function () {
+  const page = await browser.newPage();
+
+  try {
+    // Navigate to homepage
+    await page.goto('https://mywebsite.com');
+    await page.waitForSelector('p[class="product-count"]');
+    await page.screenshot({ path: 'screenshots/01_homepage.png' });
+    await page.waitForTimeout(4000);
+
+    // Click on product
+    const productLink = page.locator('a[class="product-link"]');
+    await productLink.click();
+    await page.waitForSelector('button[name="add-to-cart"]');
+    await page.screenshot({ path: 'screenshots/02_product.png' });
+    
+    check(page, {
+      'add to cart visible': page.locator('button[name="add-to-cart"]').isVisible(),
+    });
+  } finally {
+    await page.close();
+  }
+}
+```
+
+**When to use:**
+- Testing frontend performance
+- Validating user interactions
+- Testing Single-Page Applications
+- Measuring actual user experience
+
+<Warning>
+Browser-based tests are more resource-intensive. Use fewer VUs compared to protocol-based tests.
+</Warning>
+
+### Hybrid Load Testing
+
+Combine protocol-based and browser-based testing for comprehensive coverage:
+
+```javascript
+import http from 'k6/http';
+import { browser } from 'k6/browser';
+import { check } from 'k6';
+
+export const options = {
+  scenarios: {
+    // Protocol-based: Generate most of the load
+    protocol_load: {
+      executor: 'constant-vus',
+      vus: 100,
+      duration: '5m',
+      exec: 'protocolTest',
+    },
+    // Browser-based: Measure frontend performance
+    browser_load: {
+      executor: 'constant-vus',
+      vus: 5,
+      duration: '5m',
+      exec: 'browserTest',
+      options: {
+        browser: { type: 'chromium' },
+      },
+    },
+  },
+};
+
+// Protocol-based test function
+export function protocolTest() {
+  const res = http.get('https://mywebsite.com');
+  check(res, { 'status 200': (r) => r.status === 200 });
+}
+
+// Browser-based test function
+export async function browserTest() {
+  const page = await browser.newPage();
+  try {
+    await page.goto('https://mywebsite.com');
+    await page.waitForSelector('h1');
+  } finally {
+    await page.close();
+  }
+}
+```
+
+<Tip>
+**Recommended ratio:** Use 95% protocol-based tests and 5% browser-based tests to balance load generation with frontend validation.
+</Tip>
+
+## Component vs End-to-End Testing
+
+### Component Testing
+
+Focus on specific functionalities or endpoints:
+
+```javascript
+import http from 'k6/http';
+import { check } from 'k6';
+
+export const options = {
+  scenarios: {
+    search_api: {
+      executor: 'constant-arrival-rate',
+      rate: 200,
+      timeUnit: '1s',
+      duration: '5m',
+      preAllocatedVUs: 50,
+    },
+  },
+};
+
+export default function () {
+  // Test only the search endpoint
+  const res = http.get('https://mywebsite.com/api/search?q=product');
+  check(res, {
+    'search successful': (r) => r.status === 200,
+    'results returned': (r) => r.json('results').length > 0,
+  });
+}
+```
+
+**When to use:**
+- Stress testing specific components
+- Finding breaking points
+- Debugging performance issues
+- Testing critical functionalities
+
+### End-to-End Testing
+
+Simulate complete user journeys:
+
+```javascript
+import http from 'k6/http';
+import { check, sleep, group } from 'k6';
+
+export const options = {
+  stages: [
+    { duration: '2m', target: 50 },
+    { duration: '5m', target: 50 },
+    { duration: '2m', target: 0 },
+  ],
+};
+
+export default function () {
+  group('Browse Homepage', function () {
+    const homeRes = http.get('https://mywebsite.com');
+    check(homeRes, { 'homepage loaded': (r) => r.status === 200 });
+    sleep(3);
+  });
+  
+  group('Search Products', function () {
+    const searchRes = http.get('https://mywebsite.com/search?q=laptop');
+    check(searchRes, { 'search results': (r) => r.status === 200 });
+    sleep(2);
+  });
+  
+  group('View Product', function () {
+    const productRes = http.get('https://mywebsite.com/product/123');
+    check(productRes, { 'product page loaded': (r) => r.status === 200 });
+    sleep(5);
+  });
+  
+  group('Add to Cart', function () {
+    const cartRes = http.post('https://mywebsite.com/cart/add',
+      JSON.stringify({ productId: 123, quantity: 1 }),
+      { headers: { 'Content-Type': 'application/json' } });
+    check(cartRes, { 'added to cart': (r) => r.status === 200 });
+    sleep(1);
+  });
+}
+```
+
+**When to use:**
+- Testing realistic user behavior
+- Validating entire workflows
+- Measuring cross-component performance
+- Production-like scenarios
+
+## Scripting Best Practices
+
+### Record User Journeys
+
+Use the k6 browser recorder to capture real user sessions:
+
+```bash
+# Record a session using the browser recorder extension
+# Then convert to k6 script
+har-to-k6 recording.har -o test.js
+```
+
+### Correlate Dynamic Data
+
+Extract values from responses for subsequent requests:
+
+```javascript
+import http from 'k6/http';
+import { check } from 'k6';
+
+export default function () {
+  // Login and extract session token
+  const loginRes = http.post('https://mywebsite.com/login',
+    JSON.stringify({ username: 'user', password: 'pass' }));
+  
+  const sessionToken = loginRes.json('sessionToken');
+  
+  // Use token in subsequent requests
+  const profileRes = http.get('https://mywebsite.com/profile', {
+    headers: { 'Authorization': `Bearer ${sessionToken}` },
+  });
+  
+  check(profileRes, { 'profile loaded': (r) => r.status === 200 });
+}
+```
+
+### Handle Static Resources
+
+<Tabs>
+  <Tab title="Include Resources">
+    Include CSS, JavaScript, and images to measure complete page load:
+    ```javascript
+    const responses = http.batch([
+      ['GET', 'https://mywebsite.com/page'],
+      ['GET', 'https://mywebsite.com/style.css'],
+      ['GET', 'https://mywebsite.com/app.js'],
+      ['GET', 'https://mywebsite.com/logo.png'],
+    ]);
+    ```
+  </Tab>
+  
+  <Tab title="Exclude Resources">
+    Exclude resources served by CDN (separate SLA):
+    ```javascript
+    // Only test application server responses
+    const response = http.get('https://mywebsite.com/page');
+    ```
+  </Tab>
+</Tabs>
+
+### Use Realistic Think Time
+
+Add variable delays to simulate human behavior:
+
+```javascript
+import { sleep } from 'k6';
+
+export default function () {
+  http.get('https://mywebsite.com');
+  sleep(Math.random() * 5 + 2); // 2-7 seconds
+  
+  http.get('https://mywebsite.com/products');
+  sleep(Math.random() * 3 + 1); // 1-4 seconds
+}
+```
+
+### Manage Cookies and Cache
+
+```javascript
+import http from 'k6/http';
+
+export const options = {
+  // Keep cookies between iterations (default: false)
+  noCookiesReset: true,
+};
+
+export default function () {
+  // Cookies persist across iterations
+  http.get('https://mywebsite.com');
+}
+```
+
+### Organize with Tags and Groups
+
+```javascript
+import http from 'k6/http';
+import { group } from 'k6';
+
+export default function () {
+  group('Homepage Flow', function () {
+    http.get('https://mywebsite.com', {
+      tags: { page: 'home', type: 'html' },
+    });
+    
+    http.get('https://mywebsite.com/style.css', {
+      tags: { page: 'home', type: 'static' },
+    });
+  });
+  
+  group('Product Flow', function () {
+    http.get('https://mywebsite.com/products', {
+      tags: { page: 'products', type: 'html' },
+    });
+  });
+}
+```
+
+## Execution Considerations
+
+### Test Environments
+
+<Steps>
+  <Step title="Pre-production environments">
+    Ideal for identifying issues early. Can be more aggressive with testing but may not match production exactly.
+  </Step>
+  
+  <Step title="Production testing">
+    Provides most accurate results but requires careful approach:
+    - Use lower loads during peak hours
+    - Schedule tests for off-peak times
+    - Use synthetic monitoring for continuous validation
+    - Ensure observability is ready
+  </Step>
+</Steps>
+
+### Load Generator Locations
+
+<CardGroup cols={2}>
+  <Card title="On-Premises" icon="building">
+    **Pros:** Good for early development, uses existing infrastructure
+    
+    **Cons:** May yield false positives due to network proximity
+  </Card>
+  
+  <Card title="Cloud-Based" icon="cloud">
+    **Pros:** Realistic network latency, geographic distribution, easy scaling
+    
+    **Cons:** Requires cloud access or firewall configuration
+  </Card>
+</CardGroup>
+
+## Complete Website Test Example
+
+```javascript
+import http from 'k6/http';
+import { check, sleep, group } from 'k6';
+import { SharedArray } from 'k6/data';
+import { Rate } from 'k6/metrics';
+
+const errorRate = new Rate('errors');
+
+const searchTerms = new SharedArray('searches', function () {
+  return ['laptop', 'phone', 'tablet', 'camera', 'headphones'];
+});
+
+export const options = {
+  stages: [
+    { duration: '3m', target: 50 },
+    { duration: '10m', target: 50 },
+    { duration: '3m', target: 0 },
+  ],
+  thresholds: {
+    http_req_duration: ['p(95)<2000'],
+    'http_req_duration{page:home}': ['p(95)<1000'],
+    'http_req_duration{page:product}': ['p(95)<1500'],
+    http_req_failed: ['rate<0.01'],
+    errors: ['rate<0.05'],
+  },
+};
+
+export default function () {
+  let response;
+  
+  // Homepage
+  group('Visit Homepage', function () {
+    response = http.get('https://mywebsite.com', {
+      tags: { page: 'home' },
+    });
+    
+    const success = check(response, {
+      'homepage status 200': (r) => r.status === 200,
+      'homepage has title': (r) => r.body.includes('<title>'),
+    });
+    
+    errorRate.add(!success);
+    sleep(Math.random() * 3 + 2);
+  });
+  
+  // Search
+  group('Search Products', function () {
+    const term = searchTerms[Math.floor(Math.random() * searchTerms.length)];
+    response = http.get(`https://mywebsite.com/search?q=${term}`, {
+      tags: { page: 'search' },
+    });
+    
+    const success = check(response, {
+      'search status 200': (r) => r.status === 200,
+      'search has results': (r) => r.body.includes('results'),
+    });
+    
+    errorRate.add(!success);
+    sleep(Math.random() * 2 + 1);
+  });
+  
+  // View Product
+  group('View Product', function () {
+    const productId = Math.floor(Math.random() * 1000) + 1;
+    response = http.get(`https://mywebsite.com/product/${productId}`, {
+      tags: { page: 'product' },
+    });
+    
+    const success = check(response, {
+      'product status 200': (r) => r.status === 200,
+      'product has price': (r) => r.body.includes('price'),
+    });
+    
+    errorRate.add(!success);
+    sleep(Math.random() * 5 + 3);
+  });
+}
+```
+
+## Recommendations Summary
+
+<Tabs>
+  <Tab title="Frontend Focus">
+    - Use **browser-based testing**
+    - Focus on **frontend performance metrics**
+    - Run **end-to-end user flows**
+    - Test with **realistic user counts**
+  </Tab>
+  
+  <Tab title="Backend Focus">
+    - Use **protocol-based testing**
+    - Focus on **backend performance metrics**
+    - Start with **component testing**
+    - Generate **high load volumes**
+  </Tab>
+  
+  <Tab title="Comprehensive">
+    - Use **hybrid testing approach**
+    - Test **both frontend and backend**
+    - Run tests in **multiple environments**
+    - Use **cloud load generators** for public sites
+  </Tab>
+</Tabs>

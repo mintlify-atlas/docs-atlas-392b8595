@@ -1,0 +1,271 @@
+---
+title: 'k6/experimental'
+description: 'Experimental APIs and features for testing new k6 functionality'
+icon: 'flask'
+---
+
+The `k6/experimental` module provides access to experimental APIs and features that are under development or evaluation for inclusion in k6.
+
+<Warning>
+Experimental modules may have breaking changes in future releases. Use them to test new features, but be prepared to update your scripts when APIs change or stabilize.
+</Warning>
+
+## Overview
+
+Experimental modules allow you to try new k6 features before they become stable. Features that prove useful and stable are eventually promoted to regular k6 modules.
+
+## Importing Experimental Modules
+
+```javascript
+import csv from 'k6/experimental/csv';
+import { open } from 'k6/experimental/fs';
+import { ReadableStream } from 'k6/experimental/streams';
+```
+
+## Available Experimental Modules
+
+### CSV Module
+
+Provides efficient and convenient parsing of CSV files with better performance than JavaScript-based libraries.
+
+<Card title="csv" icon="table" href="/api/csv">
+  Efficient CSV file parsing and streaming
+</Card>
+
+**Key Features:**
+- Fast parsing using Go-based processing
+- Lower memory usage with SharedArray support
+- Line-by-line streaming for large files
+- Full-file parsing for performance-critical scenarios
+
+**Example:**
+```javascript
+import csv from 'k6/experimental/csv';
+import { open } from 'k6/experimental/fs';
+
+const file = await open('data.csv');
+const csvRecords = await csv.parse(file, { delimiter: ',' });
+
+export default async function () {
+  console.log(csvRecords[0]); // First CSV record
+}
+```
+
+### Filesystem Module
+
+Provides memory-efficient file interactions within test scripts, including reading files, seeking, and retrieving metadata.
+
+<Card title="fs" icon="folder-open" href="/api/fs">
+  Memory-efficient file system operations
+</Card>
+
+**Key Features:**
+- Memory-efficient file loading (shared across VUs)
+- File seeking and random access
+- File metadata and stats
+- Async file operations
+
+**Example:**
+```javascript
+import { open, SeekMode } from 'k6/experimental/fs';
+
+const file = await open('data.txt');
+
+export default async function () {
+  await file.seek(0, SeekMode.Start);
+  
+  const buffer = new Uint8Array(1024);
+  const bytesRead = await file.read(buffer);
+  
+  console.log(`Read ${bytesRead} bytes`);
+}
+```
+
+### Streams Module
+
+Implements the [Streams API specification](https://streams.spec.whatwg.org/) for defining and consuming readable streams.
+
+<Card title="streams" icon="stream" href="/api/streams">
+  Streams API for reading and transforming data
+</Card>
+
+**Key Features:**
+- ReadableStream implementation
+- Transform streams
+- Backpressure handling
+- Integration with other k6 modules
+
+**Example:**
+```javascript
+import { ReadableStream } from 'k6/experimental/streams';
+
+const stream = new ReadableStream({
+  start(controller) {
+    controller.enqueue('chunk 1');
+    controller.enqueue('chunk 2');
+    controller.close();
+  }
+});
+
+export default async function () {
+  const reader = stream.getReader();
+  
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    console.log('Read:', value);
+  }
+}
+```
+
+## Module Comparison
+
+### CSV Module
+
+| Approach | Memory Usage | Performance | Use Case |
+|----------|--------------|-------------|----------|
+| `csv.parse()` | Higher (full file) | Faster | Performance-critical scenarios |
+| `csv.Parser` | Lower (streaming) | Moderate | Large files, memory constraints |
+
+### Filesystem vs Traditional open()
+
+| Feature | experimental/fs | Traditional open() |
+|---------|-----------------|--------------------|
+| Memory Usage | Low (shared) | High (per-VU copy) |
+| File Size | Any size | Limited by memory |
+| Random Access | Yes (seeking) | No |
+| Read Mode | Streaming | Full load |
+
+## API Reference Summary
+
+### k6/experimental/csv
+
+<ResponseField name="csv.parse(file, options)" type="function">
+  Parses entire CSV file into a SharedArray
+</ResponseField>
+
+<ResponseField name="csv.Parser" type="class">
+  Streaming CSV parser for line-by-line reading
+</ResponseField>
+
+### k6/experimental/fs
+
+<ResponseField name="open(filePath)" type="function">
+  Opens a file and returns a File instance
+</ResponseField>
+
+<ResponseField name="File" type="class">
+  Represents a file with read(), seek(), and stat() methods
+</ResponseField>
+
+<ResponseField name="SeekMode" type="enum">
+  Enum for seek operations: Start, Current, End
+</ResponseField>
+
+### k6/experimental/streams
+
+<ResponseField name="ReadableStream" type="class">
+  Implements the Streams API ReadableStream
+</ResponseField>
+
+## Best Practices
+
+### Using Experimental Features
+
+<AccordionGroup>
+  <Accordion title="Pin Your k6 Version">
+    Experimental APIs may change between k6 versions. Pin your k6 version in CI/CD to avoid unexpected breaking changes.
+    
+    ```bash
+    docker run --rm -i grafana/k6:0.48.0 run - <script.js
+    ```
+  </Accordion>
+  
+  <Accordion title="Monitor Deprecation Notices">
+    Check k6 release notes for deprecation warnings and migration paths when experimental modules are stabilized or changed.
+  </Accordion>
+  
+  <Accordion title="Test Before Production">
+    Thoroughly test scripts using experimental modules in non-production environments before deploying to production load tests.
+  </Accordion>
+  
+  <Accordion title="Have Fallback Plans">
+    Be prepared to refactor if an experimental module is removed or significantly changed in future k6 versions.
+  </Accordion>
+</AccordionGroup>
+
+## Migration Paths
+
+Some experimental modules have been promoted to stable:
+
+| Former Experimental Module | Stable Module |
+|---------------------------|---------------|
+| `k6/experimental/browser` | `k6/browser` |
+| `k6/experimental/websockets` | `k6/websockets` |
+| `k6/experimental/grpc` | `k6/net/grpc` |
+| `k6/experimental/timers` | `k6/timers` |
+
+<Tip>
+When an experimental module is promoted to stable, the old import path usually continues to work for a few versions with deprecation warnings.
+</Tip>
+
+## Examples
+
+### Combining CSV and Filesystem
+
+```javascript
+import csv from 'k6/experimental/csv';
+import { open } from 'k6/experimental/fs';
+import { scenario } from 'k6/execution';
+
+export const options = {
+  iterations: 100,
+};
+
+const file = await open('users.csv');
+const users = await csv.parse(file, { delimiter: ',' });
+
+export default async function () {
+  // Each iteration gets a unique user
+  const user = users[scenario.iterationInTest % users.length];
+  console.log(`Testing with user: ${user[0]}`);
+}
+```
+
+### Streaming Large Files
+
+```javascript
+import csv from 'k6/experimental/csv';
+import { open } from 'k6/experimental/fs';
+
+const file = await open('large-dataset.csv');
+const parser = new csv.Parser(file);
+
+export default async function () {
+  // Read one line per iteration
+  const { done, value } = await parser.next();
+  
+  if (!done) {
+    console.log('Processing row:', value);
+  } else {
+    console.log('Reached end of file');
+  }
+}
+```
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="CSV Module" icon="table" href="/api/csv">
+    Efficient CSV parsing
+  </Card>
+  <Card title="Filesystem Module" icon="folder" href="/api/fs">
+    Memory-efficient file operations
+  </Card>
+  <Card title="Streams API" icon="stream" href="/api/streams">
+    Data streaming support
+  </Card>
+  <Card title="k6 Changelog" icon="list" href="https://github.com/grafana/k6/releases">
+    Track experimental module changes
+  </Card>
+</CardGroup>

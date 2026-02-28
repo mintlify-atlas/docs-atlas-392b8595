@@ -1,0 +1,212 @@
+{
+  "projectType": "cli-tool",
+  "projectName": "Grafana k6",
+  "projectDescription": "Open-source, developer-friendly load testing tool for performance and reliability engineering",
+  "theme": "aspen",
+  "primaryColor": "#FF6C0C",
+  "lightColor": "#FFB280",
+  "darkColor": "#D95500",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Get Started",
+        "groups": [
+          {
+            "group": "Introduction",
+            "pages": ["introduction", "why-k6"]
+          },
+          {
+            "group": "Quick Start",
+            "pages": ["get-started/installation", "get-started/first-test", "get-started/results"]
+          }
+        ]
+      },
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Using k6",
+            "pages": [
+              "using-k6/overview",
+              "using-k6/test-lifecycle",
+              "using-k6/http-requests",
+              "using-k6/checks",
+              "using-k6/thresholds",
+              "using-k6/options",
+              "using-k6/metrics",
+              "using-k6/tags-and-groups",
+              "using-k6/scenarios"
+            ]
+          },
+          {
+            "group": "Testing Guides",
+            "pages": [
+              "testing-guides/test-types",
+              "testing-guides/api-load-testing",
+              "testing-guides/load-testing-websites",
+              "testing-guides/distributed-tests",
+              "testing-guides/automated-testing",
+              "testing-guides/performance-monitoring"
+            ]
+          },
+          {
+            "group": "Browser Testing",
+            "pages": [
+              "browser/overview",
+              "browser/getting-started",
+              "browser/how-to-write-tests",
+              "browser/best-practices"
+            ]
+          },
+          {
+            "group": "Results & Visualization",
+            "pages": [
+              "results/overview",
+              "results/end-of-test",
+              "results/real-time",
+              "results/grafana-dashboards",
+              "results/web-dashboard"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core API",
+            "pages": [
+              "api/k6",
+              "api/k6-http",
+              "api/k6-metrics",
+              "api/k6-data",
+              "api/k6-encoding",
+              "api/k6-crypto"
+            ]
+          },
+          {
+            "group": "Browser API",
+            "pages": [
+              "api/k6-browser"
+            ]
+          },
+          {
+            "group": "Protocol APIs",
+            "pages": [
+              "api/k6-websockets",
+              "api/k6-ws",
+              "api/k6-net-grpc"
+            ]
+          },
+          {
+            "group": "Extension APIs",
+            "pages": [
+              "api/k6-experimental"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "api/k6-html",
+              "api/k6-timers",
+              "api/init-context",
+              "api/execution-context"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Extensions",
+        "groups": [
+          {
+            "group": "Extensions",
+            "pages": [
+              "extensions/overview",
+              "extensions/explore",
+              "extensions/create",
+              "extensions/bundle"
+            ]
+          },
+          {
+            "group": "Popular Extensions",
+            "pages": [
+              "extensions/xk6-disruptor",
+              "extensions/browser",
+              "extensions/protocol-extensions"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Resources",
+        "groups": [
+          {
+            "group": "Examples",
+            "pages": [
+              "examples/overview",
+              "examples/http-authentication",
+              "examples/api-crud-operations",
+              "examples/websockets",
+              "examples/data-uploads",
+              "examples/correlation-and-dynamic-data"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "reference/glossary",
+              "reference/options",
+              "reference/environment-variables",
+              "reference/archive",
+              "reference/integrations"
+            ]
+          },
+          {
+            "group": "Cloud & Studio",
+            "pages": [
+              "cloud/overview",
+              "studio/overview"
+            ]
+          },
+          {
+            "group": "Release Notes",
+            "pages": [
+              "release-notes/overview"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "CLI-based load testing tool",
+    "JavaScript test scripting",
+    "HTTP/WebSocket/gRPC protocol support",
+    "Browser performance testing",
+    "Built-in metrics and thresholds",
+    "Real-time result streaming",
+    "Extension ecosystem",
+    "Grafana Cloud integration"
+  ],
+  "publicApiSurface": [
+    "k6 run",
+    "k6 cloud",
+    "k6 archive",
+    "k6 inspect",
+    "k6 login",
+    "k6 stats",
+    "k6 status",
+    "k6 scale",
+    "k6 pause",
+    "k6 resume",
+    "http.get()",
+    "http.post()",
+    "check()",
+    "sleep()",
+    "group()",
+    "Trend",
+    "Counter",
+    "Gauge",
+    "Rate"
+  ]
+}
